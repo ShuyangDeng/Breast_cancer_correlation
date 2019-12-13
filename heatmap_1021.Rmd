@@ -1,0 +1,479 @@
+---
+title: "heatmap_1021"
+author: "Shuyang"
+date: "10/21/2019"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6)
+```
+<br>
+```{r eval=TRUE}
+library(plyr);library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(colorspace)
+library(data.table)
+library(gplots)
+library( "genefilter" )
+library(ggplot2)
+library(NMF)
+library(pkgmaker)
+library(registry)
+library(rngtools)
+library(cluster)
+
+library('heatmap.plus')
+library('gplots')
+library('RColorBrewer')
+library("pheatmap")
+library(viridis)
+
+```
+<br>
+```{r eval=TRUE, results='hold'}
+# 数据导入
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+Protein_Breast <- read.csv('Protein_Breast_2.csv', stringsAsFactors = FALSE)
+RNA_Breast <- read.csv('RNA_Breast_2.csv', stringsAsFactors = FALSE)
+CNA_Breast <- read.csv('CNA_Breast_2.csv', stringsAsFactors = FALSE)
+pam50_genes <- read.csv('pam50_genes.csv', stringsAsFactors = FALSE)
+```
+
+```{r eval=TRUE, results='hold'}
+# 数据筛选
+Protein_Breast <- merge(pam50_genes, Protein_Breast, by.y = 'X', by.x = 'gene') #inner join if don't use all.x=TRUE
+RNA_Breast <- merge(pam50_genes, RNA_Breast, by.y = 'X', by.x = 'gene', all.x = TRUE)
+CNA_Breast <- merge(pam50_genes, CNA_Breast, by.y='X', by.x='gene')
+```
+
+```{r eval=TRUE, results='hold'}
+# 数据转换
+row.names(Protein_Breast) <- Protein_Breast$gene
+Protein_Breast <- select(Protein_Breast, -gene) 
+
+row.names(RNA_Breast) <- RNA_Breast$gene
+RNA_Breast <- select(RNA_Breast, -gene)
+
+rownames(CNA_Breast) <- CNA_Breast$gene
+CNA_Breast <- select(CNA_Breast, -gene)
+```
+### rename column 
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+colnames(CNA_Breast) <- sapply(colnames(CNA_Breast), getName)
+colnames(Protein_Breast) <- sapply(colnames(Protein_Breast), getName)
+colnames(RNA_Breast) <- sapply(colnames(RNA_Breast), getName)
+```
+
+
+```{r eval=TRUE, results='hold'}
+tProtein_Breast <- t(Protein_Breast)
+tCNA_Breast <- t(CNA_Breast)
+tRNA_Breast <- t(RNA_Breast)
+
+tProtein_Breast <- as.data.frame(tProtein_Breast)
+tCNA_Breast <- as.data.frame(tCNA_Breast)
+tRNA_Breast <- as.data.frame(tRNA_Breast)
+
+
+```
+
+```{r eval=TRUE, results='hold'}
+# make correlation matrix with pearson method
+Protein_cormat <- round(cor(tProtein_Breast, use='p', method='pearson'), 10)
+#head(Protein_cormat) #matrix
+CNA_cormat <- round(cor(tCNA_Breast, use='p', method='pearson'), 10)
+RNA_cormat <- round(cor(tRNA_Breast, use='p', method='pearson'), 10)
+```
+
+```{r eval=TRUE, results='hold'}
+# make correlation matrix with spearman method
+Protein_cormat2 <- round(cor(tProtein_Breast, use='p', method = 'spearman'), 10)
+#head(Protein_cormat) #matrix
+CNA_cormat2 <- round(cor(tCNA_Breast, use='p', method='spearman'), 10)
+RNA_cormat2 <- round(cor(tRNA_Breast, use='p', method='spearman'), 10)
+```
+### make heatmap
+```{r eval=TRUE, results='hold'}
+# Protein-protein
+paletteLength <- 10
+col.pal <- colorRampPalette(c("blue", "white", "red"))(paletteLength)
+#col.pal <- brewer.pal(9,"Blues")
+drows1 <- "euclidean"
+dcols1 <- "euclidean"
+
+hm.parameters_protein <- list(Protein_cormat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "Protein-Protein heatmap",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 10,
+  fontsize_row = 5,
+  fontsize_col = 5
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_protein)
+```
+
+```{r eval=TRUE, results='hold'}
+#RNA-RNA
+
+hm.parameters_RNA <- list(RNA_cormat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = 'none',
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-RNA heatmap",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 10,
+  fontsize_row = 5,
+  fontsize_col = 5)
+ 
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_RNA)
+```
+
+```{r eval=TRUE, results='hold'}
+#CNA-CNA
+hm.parameters_CNA <- list(CNA_cormat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "CNA-CNA heatmap",
+  clustering_method = "average",
+  cluster_rows = F, cluster_cols = F,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize=10,
+  fontsize_row = 5,
+  fontsize_col = 5)
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_CNA)
+```
+<br>
+
+pam50_genes <- read.csv('pam50_genes.csv', stringsAsFactors = FALSE)
+pam50_genes <- pam50_genes[order(pam50_genes$gene),]
+pam50_list <- as.list(pam50_genes)
+
+RNA-CNA
+rna_cna_cormat=matrix(NA, length(pam50_list), length(pam50_list))
+for(gene_rna in pam50_list){
+  #print(gene_rna)
+  if(gene_rna %in% colnames(tRNA_Breast)){
+    #print(gene_rna)
+    for(gene_cna in pam50_list){
+      if(gene_cna %in% colnames(tCNA_Breast)){
+        rna_cna_cormat <- rbind(round(cor(tRNA_Breast[gene_rna],
+                                                      tCNA_Breast[gene_cna],
+                                                      use='p',
+                                                      
+                                                      method='pearson'), 10))
+
+      }
+    }
+    
+  }
+}
+
+
+```{r eval=TRUE, results='hold'}
+#make csv from python for heatmap use
+rmbracket1 <- function(x){
+  w <- unlist(strsplit(x, "\\'"))
+  w2 <- w[2]
+  return(w2)
+}
+
+rmbracket2 <- function(x){
+  w <- unlist(strsplit(x, "\\)"))
+  w2 <- w[1]
+  return(w2)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+# load data and remove symbols
+#rna_cna <- read.csv('rna_cna.csv',header=FALSE, stringsAsFactors = FALSE)
+#pro_rna <- read.csv('pro_rna.csv',header=FALSE, stringsAsFactors = FALSE)
+rna_cna_spearman <- read.csv('rna_cna_spearman.csv',header=FALSE, stringsAsFactors = FALSE)
+pro_rna_spearman <- read.csv('rna_cna_spearman.csv',header=FALSE, stringsAsFactors = FALSE)
+```
+
+```{r eval=TRUE, results='hold'}
+#rna_cna$V1 <- sapply(rna_cna$V1, rmbracket1)
+#rna_cna$V2 <- sapply(rna_cna$V2, rmbracket1)
+#rna_cna$V3 <- sapply(rna_cna$V3, rmbracket2)
+
+rna_cna_spearman$V1 <- sapply(rna_cna_spearman$V1, rmbracket1)
+rna_cna_spearman$V2 <- sapply(rna_cna_spearman$V2, rmbracket1)
+rna_cna_spearman$V3 <- sapply(rna_cna_spearman$V3, rmbracket2)
+
+#pro_rna$V1 <- sapply(pro_rna$V1, rmbracket1)
+#pro_rna$V2 <- sapply(pro_rna$V2, rmbracket1)
+#pro_rna$V3 <- sapply(pro_rna$V3, rmbracket2)
+
+pro_rna_spearman$V1 <- sapply(pro_rna_spearman$V1, rmbracket1)
+pro_rna_spearman$V2 <- sapply(pro_rna_spearman$V2, rmbracket1)
+pro_rna_spearman$V3 <- sapply(pro_rna_spearman$V3, rmbracket2)
+```
+
+```{r eval=TRUE, results='hold'}
+# diffrenciate x and y as rna and cna
+#rna_cna$V1 <- paste0(rna_cna$V1, '_rna')
+#rna_cna$V2 <- paste0(rna_cna$V2, '_cna')
+
+rna_cna_spearman$V1 <- paste0(rna_cna_spearman$V1, '_rna')
+rna_cna_spearman$V2 <- paste0(rna_cna_spearman$V2, '_cna')
+
+# diffrenciate x and y as pro and rna
+#pro_rna$V1 <- paste0(pro_rna$V1, '_pro')
+#pro_rna$V2 <- paste0(pro_rna$V2, '_rna')
+
+pro_rna_spearman$V1 <- paste0(pro_rna_spearman$V1, '_pro')
+pro_rna_spearman$V2 <- paste0(pro_rna_spearman$V2, '_rna')
+```
+
+```{r eval=TRUE, results='hold'}
+# convert csv to data_frame, putting rna and cna gene name in x and y axis
+#temp <- data.frame(x=rna_cna$V1,
+                   #y=rna_cna$V2,
+                   #z=rna_cna$V3)
+
+#r_c_mat <- spread(temp, y,z )
+
+temp_spearman <- data.frame(x=rna_cna_spearman$V1,
+                   y=rna_cna_spearman$V2,
+                   z=rna_cna_spearman$V3)
+
+r_c_mat_spearman <- spread(temp_spearman, y,z )
+```
+
+```{r eval=TRUE, results='hold'}
+# convert csv to data_frame, putting pro and rna gene name in x and y axis
+#temp2 <- data.frame(x=pro_rna$V2,
+                   #y=pro_rna$V1,
+                   #z=pro_rna$V3)
+
+#p_r_mat <- spread(temp2, y,z )
+
+temp_spearman2 <- data.frame(x=pro_rna_spearman$V2,
+                   y=pro_rna_spearman$V1,
+                   z=pro_rna_spearman$V3)
+
+p_r_mat_spearman <- spread(temp_spearman2, y,z )
+```
+
+
+```{r eval=TRUE, results='hold'}
+#rename rows
+#rownames(r_c_mat) <- r_c_mat$x
+#r_c_mat <- select(r_c_mat, -x)
+
+#rownames(p_r_mat) <- p_r_mat$x
+#p_r_mat <- select(p_r_mat, -x)
+
+rownames(r_c_mat_spearman) <- r_c_mat_spearman$x
+r_c_mat_spearman <- select(r_c_mat_spearman, -x)
+
+rownames(p_r_mat_spearman) <- p_r_mat_spearman$x
+p_r_mat_spearman <- select(p_r_mat_spearman, -x)
+```
+
+```{r eval=TRUE, results='hold'}
+#replace all nan as NA for removing 
+#r_c_mat[r_c_mat == ' nan'] <- NA # there is a space before nan
+#p_r_mat[p_r_mat == ' nan'] <- NA # there is a space before nan
+
+r_c_mat_spearman[r_c_mat_spearman == ' nan'] <- NA # there is a space before nan
+p_r_mat_spearman[p_r_mat_spearman == ' nan'] <- NA # there is a space before nan
+```
+
+```{r eval=TRUE, results='hold'}
+# remove rows which contains all NA values
+#r_c_mat <- r_c_mat[!(rowSums(is.na(r_c_mat))==ncol(r_c_mat)),]
+#p_r_mat <- p_r_mat[!(rowSums(is.na(p_r_mat))==ncol(p_r_mat)),]
+
+r_c_mat_spearman <- r_c_mat_spearman[!(rowSums(is.na(r_c_mat_spearman))==ncol(r_c_mat_spearman)),]
+p_r_mat_spearman <- p_r_mat_spearman[!(rowSums(is.na(p_r_mat_spearman))==ncol(p_r_mat_spearman)),]
+```
+
+```{r eval=TRUE, results='hold'}
+# remove cols which contains all NA values
+#r_c_mat <- r_c_mat[, !(colSums(is.na(r_c_mat))==nrow(r_c_mat))]
+#p_r_mat <- p_r_mat[, !(colSums(is.na(p_r_mat))==nrow(p_r_mat))]
+
+r_c_mat_spearman <- r_c_mat_spearman[, !(colSums(is.na(r_c_mat_spearman))==nrow(r_c_mat_spearman))]
+p_r_mat_spearman <- p_r_mat_spearman[, !(colSums(is.na(p_r_mat_spearman))==nrow(p_r_mat_spearman))]
+```
+
+```{r eval=TRUE, results='hold'}
+# convert to mumeric for picturing heatmap
+#r_c_mat[] <- lapply(r_c_mat, function(x) as.numeric(as.character(x)))
+#p_r_mat[] <- lapply(p_r_mat, function(x) as.numeric(as.character(x)))
+
+r_c_mat_spearman[] <- lapply(r_c_mat_spearman, function(x) as.numeric(as.character(x)))
+p_r_mat_spearman[] <- lapply(p_r_mat_spearman, function(x) as.numeric(as.character(x)))
+```
+
+
+```{r eval=TRUE, results='hold'}
+#r_c_mat <- as.matrix(r_c_mat)
+#p_r_mat <- as.matrix(p_r_mat)
+
+r_c_mat_spearman <- as.matrix(r_c_mat_spearman)
+p_r_mat_spearman <- as.matrix(p_r_mat_spearman)
+```
+
+
+
+```{r eval=TRUE, results='hold'}
+# RNA-CNA heatmap with pearson
+hm.parameters_r_c <- list(r_c_mat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-CNA heatmap",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 10,
+  fontsize_row = 5,
+  fontsize_col = 5
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_r_c)
+```
+
+
+```{r eval=TRUE, results='hold'}
+# RNA-CNA heatmap with same order of x and y with pearson
+hm.parameters_r_c_order <- list(r_c_mat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-CNA heatmap",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 5
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_r_c_order)
+```
+
+```{r eval=TRUE, results='hold'}
+# RNA-CNA heatmap with spearman
+hm.parameters_r_c_spearman <- list(r_c_mat_spearman, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-CNA heatmap",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 5
+  )
+```
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_r_c_spearman)
+```
+
+
+
+```{r eval=TRUE, results='hold'}
+# Protein_RNA heatmap with same order of x and y
+# which is to change cluster_rows and cluster_cols to FALSE
+paletteLength <- 10
+col.pal <- colorRampPalette(c("blue", "white", "red"))(paletteLength)
+hm.parameters_p_r_order <- list(p_r_mat, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-protein heatmap (pearson)",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 10,
+  fontsize_row = 5,
+  fontsize_col = 5
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_p_r_order)
+```
+
+```{r eval=TRUE, results='hold'}
+# Protein_RNA heatmap with spearman
+paletteLength <- 10
+col.pal <- colorRampPalette(c("blue", "white", "red"))(paletteLength)
+hm.parameters_p_r_spearman <- list(p_r_mat_spearman, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "RNA-protein heatmap (spearman)",
+  clustering_method = "average",
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 10,
+  fontsize_row = 5,
+  fontsize_col = 5
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters_p_r_spearman)
+```
+
+### spearman doesn't generate much 'nan' as pearson does
+

@@ -1,0 +1,712 @@
+---
+title: "Find nearest gene of the whole gene table to the 3 gene separately (ERBB2, CCNB1, CENPF)"
+author: "Shuyang"
+date: "10/27/2019"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6,fig.height = 3)
+```
+<br>
+```{r eval=TRUE}
+library(plyr);library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(colorspace)
+library(data.table)
+library(gplots)
+library( "genefilter" )
+library(ggplot2)
+library(NMF)
+library(pkgmaker)
+library(registry)
+library(rngtools)
+library(cluster)
+
+library('heatmap.plus')
+library('gplots')
+library('RColorBrewer')
+library("pheatmap")
+library(viridis)
+
+```
+<br>
+### Data preprocessing
+```{r eval=TRUE, results='hold'}
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+CNA_cormatch2 <- read.csv('CNA_match2.csv', header=TRUE)
+Protein_cormatch2 <- read.csv('Protein_match2.csv', header=TRUE)
+RNA_cormatch2 <- read.csv('RNA_match2.csv', header=TRUE)
+```
+<br>
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+<br>
+```{r eval=TRUE, results='hold'}
+colnames(CNA_cormatch2)[2:ncol(CNA_cormatch2)] <- sapply(colnames(CNA_cormatch2)[-1], getName)
+colnames(RNA_cormatch2)[2:ncol(RNA_cormatch2)] <- sapply(colnames(RNA_cormatch2)[-1], getName)
+colnames(Protein_cormatch2)[2:ncol(Protein_cormatch2)] <- sapply(colnames(Protein_cormatch2)[-1], getName)
+```
+<br>
+```{r eval=TRUE, results='hold'}
+rownames(CNA_cormatch2) <- CNA_cormatch2$X
+CNA_cormatch2 <- select(CNA_cormatch2, -X)
+#CNA_cormatch2 <- as.matrix(CNA_cormatch2)
+
+rownames(RNA_cormatch2) <- RNA_cormatch2$X
+RNA_cormatch2 <- select(RNA_cormatch2, -X)
+
+rownames(Protein_cormatch2) <- Protein_cormatch2$X
+Protein_cormatch2 <- select(Protein_cormatch2, -X)
+```
+
+<br>
+### Find nearest gene of the whole gene table with the 3 gene separately (ERBB2, CCNB1, CENPF)
+```{r eval=TRUE, results='hold'}
+tProtein_cormatch2 <- t(Protein_cormatch2)
+tCNA_cormatch2 <- t(CNA_cormatch2)
+tRNA_cormatch2 <- t(RNA_cormatch2)
+
+tProtein_cormatch2 <- as.data.frame(tProtein_cormatch2)
+tCNA_cormatch2 <- as.data.frame(tCNA_cormatch2)
+tRNA_cormatch2 <- as.data.frame(tRNA_cormatch2)
+```
+
+```{r eval=TRUE, results='hold'}
+Protein_cormat <- round(cor(tProtein_cormatch2, use='p', method='pearson'), 10)
+#head(Protein_cormat) #matrix
+CNA_cormat <- round(cor(tCNA_cormatch2, use='p', method='pearson'), 10)
+RNA_cormat <- round(cor(tRNA_cormatch2, use='p', method='pearson'), 10)
+```
+
+```{r eval=TRUE, results='hold'}
+#Protein_cormat <- as.data.frame(Protein_cormat)
+#CNA_cormat <- as.data.frame(CNA_cormat)
+#RNA_cormat <- as.data.frame(RNA_cormat)
+```
+
+
+```{r eval=TRUE, results='hold'}
+#write.csv(Protein_cormat, file='Protein_cormat.csv')
+#write.csv(CNA_cormat, file='CNA_cormat.csv')
+#write.csv(RNA_cormat, file='RNA_cormat.csv')
+```
+
+
+
+### 1. protein: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_pro <- as.numeric(tProtein_cormatch2[,'ERBB2'])
+ERBB2_cor <- apply(tProtein_cormatch2,2, function(x){cor(ERBB2_pro,x)})
+ERBB2_procor <- as.data.frame(ERBB2_cor, header=FALSE)
+ERBB2_procor <- na.omit(ERBB2_procor)
+ERBB2_procor <- setDT(ERBB2_procor, keep.rownames = TRUE)[]
+ERBB2_procor <- ERBB2_procor[order(ERBB2_procor$ERBB2_cor, decreasing = FALSE),]
+```
+
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_pro_10low <- ERBB2_procor[1:10]
+ERBB2_pro_10high <- tail(ERBB2_procor, 10)
+#write.csv(ERBB2_pro_10low, file='ERBB2_pro_10low.csv')
+#write.csv(ERBB2_pro_10high, file = 'ERBB2_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(ERBB2_procor, aes(x = reorder(rn,ERBB2_procor$ERBB2_cor), y =ERBB2_procor$ERBB2_cor, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='Protein ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+### 2. RNA: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_rna <- as.numeric(tRNA_cormatch2[,'ERBB2'])
+ERBB2_cor2 <- apply(tRNA_cormatch2,2, function(x){cor(ERBB2_rna,x)})
+ERBB2_rnacor <- as.data.frame(ERBB2_cor2, header=FALSE)
+ERBB2_rnacor <- na.omit(ERBB2_rnacor)
+ERBB2_rnacor <- setDT(ERBB2_rnacor, keep.rownames = TRUE)[]
+ERBB2_rnacor <- ERBB2_rnacor[order(ERBB2_rnacor$ERBB2_cor2, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_rna_10low <- ERBB2_rnacor[1:10]
+ERBB2_rna_10high <- tail(ERBB2_rnacor, 10)
+#write.csv(ERBB2_rna_10low, file='ERBB2_rna_10low.csv')
+#write.csv(ERBB2_rna_10high, file='ERBB2_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(ERBB2_rnacor, aes(x = reorder(rn,ERBB2_rnacor$ERBB2_cor2), y =ERBB2_rnacor$ERBB2_cor2, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='RNA ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 3. CNA: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_cna <- as.numeric(tCNA_cormatch2[,'ERBB2'])
+ERBB2_cor3 <- apply(tCNA_cormatch2,2, function(x){cor(ERBB2_cna,x)})
+ERBB2_cnacor <- as.data.frame(ERBB2_cor3, header=FALSE)
+ERBB2_cnacor <- na.omit(ERBB2_cnacor)
+ERBB2_cnacor <- setDT(ERBB2_cnacor, keep.rownames = TRUE)[]
+ERBB2_cnacor <- ERBB2_cnacor[order(ERBB2_cnacor$ERBB2_cor3, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_cna_10low <- ERBB2_cnacor[1:10]
+ERBB2_cna_10high <- tail(ERBB2_cnacor, 10)
+#write.csv(ERBB2_cna_10low, file='ERBB2_cna_10low.csv')
+#write.csv(ERBB2_cna_10high, file='ERBB2_cna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(ERBB2_cnacor, aes(x = reorder(rn,ERBB2_cnacor$ERBB2_cor3), y =ERBB2_cnacor$ERBB2_cor3, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='CNA ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+### 4. CNA: CCNB1
+
+```{r eval=TRUE, results='hold'}
+CCNB1_cna <- as.numeric(tCNA_cormatch2[,'CCNB1'])
+CCNB1_cor4 <- apply(tCNA_cormatch2,2, function(x){cor(CCNB1_cna,x)})
+CCNB1_cnacor <- as.data.frame(CCNB1_cor4, header=FALSE)
+CCNB1_cnacor <- na.omit(CCNB1_cnacor)
+CCNB1_cnacor <- setDT(CCNB1_cnacor, keep.rownames = TRUE)[]
+CCNB1_cnacor <- CCNB1_cnacor[order(CCNB1_cnacor$CCNB1_cor4, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_cna_10low <- CCNB1_cnacor[1:10]
+CCNB1_cna_10high <- tail(CCNB1_cnacor, 10)
+#write.csv(CCNB1_cna_10low, file='CCNB1_cna_10low.csv')
+#write.csv(CCNB1_cna_10high, file='CCNB1_cna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CCNB1_cnacor, aes(x = reorder(rn,CCNB1_cnacor$CCNB1_cor4), y =CCNB1_cnacor$CCNB1_cor4, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='CNA CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 5. RNA: CCNB1
+
+```{r eval=TRUE, results='hold'}
+CCNB1_rna <- as.numeric(tRNA_cormatch2[,'CCNB1'])
+CCNB1_cor5 <- apply(tRNA_cormatch2,2, function(x){cor(CCNB1_rna,x)})
+CCNB1_rnacor <- as.data.frame(CCNB1_cor5, header=FALSE)
+CCNB1_rnacor <- na.omit(CCNB1_rnacor)
+CCNB1_rnacor <- setDT(CCNB1_rnacor, keep.rownames = TRUE)[]
+CCNB1_rnacor <- CCNB1_rnacor[order(CCNB1_rnacor$CCNB1_cor5, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_rna_10low <- CCNB1_rnacor[1:10]
+CCNB1_rna_10high <- tail(CCNB1_rnacor, 10)
+#write.csv(CCNB1_rna_10low, file='CCNB1_rna_10low.csv')
+#write.csv(CCNB1_rna_10high, file='CCNB1_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CCNB1_rnacor, aes(x = reorder(rn,CCNB1_rnacor$CCNB1_cor5), y =CCNB1_rnacor$CCNB1_cor5, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='RNA CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 6. Protein: CCNB1
+
+```{r eval=TRUE, results='hold'}
+# delete na for calculate correlations
+CCNB1_pro <- as.numeric(tProtein_cormatch2[,'CCNB1'])
+CCNB1_pro <- na.omit(CCNB1_pro)
+```
+
+```{r eval=TRUE, results='hold'}
+# to keep compatible dimensions, delete samples(rows) where CCNB1 is NA
+tProtein_cormatch2 <-tProtein_cormatch2[-c(26, 27, 28, 75, 76, 77),]
+CCNB1_cor6 <- apply(tProtein_cormatch2,2, function(x){cor(CCNB1_pro,x)})
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_procor <- as.data.frame(CCNB1_cor6, header=FALSE)
+CCNB1_procor <- na.omit(CCNB1_procor)
+CCNB1_procor <- setDT(CCNB1_procor, keep.rownames = TRUE)[]
+CCNB1_procor <- CCNB1_procor[order(CCNB1_procor$CCNB1_cor6, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_pro_10low <- CCNB1_procor[1:10]
+CCNB1_pro_10high <- tail(CCNB1_procor, 10)
+#write.csv(CCNB1_pro_10low, file='CCNB1_pro_10low.csv')
+#write.csv(CCNB1_pro_10high, file='CCNB1_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CCNB1_procor, aes(x = reorder(rn,CCNB1_procor$CCNB1_cor6), y =CCNB1_procor$CCNB1_cor6, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='Protein CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 7. RNA: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_rna <- as.numeric(tRNA_cormatch2[,'CENPF'])
+CENPF_cor7 <- apply(tRNA_cormatch2,2, function(x){cor(CENPF_rna,x)})
+CENPF_rnacor <- as.data.frame(CENPF_cor7, header=FALSE)
+CENPF_rnacor <- na.omit(CENPF_rnacor)
+CENPF_rnacor <- setDT(CENPF_rnacor, keep.rownames = TRUE)[]
+CENPF_rnacor <- CENPF_rnacor[order(CENPF_rnacor$CENPF_cor7, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_rna_10low <- CENPF_rnacor[1:10]
+CENPF_rna_10high <- tail(CENPF_rnacor, 10)
+#write.csv(CENPF_rna_10low, file='CENPF_rna_10low.csv')
+#write.csv(CENPF_rna_10high, file='CENPF_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CENPF_rnacor, aes(x = reorder(rn,CENPF_rnacor$CENPF_cor7), y =CENPF_rnacor$CENPF_cor7, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='RNA CENPF correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 8. CNA: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_cna <- as.numeric(tCNA_cormatch2[,'CENPF'])
+CENPF_cor8 <- apply(tCNA_cormatch2,2, function(x){cor(CENPF_cna,x)})
+CENPF_cnacor <- as.data.frame(CENPF_cor8, header=FALSE)
+CENPF_cnacor <- na.omit(CENPF_cnacor)
+CENPF_cnacor <- setDT(CENPF_cnacor, keep.rownames = TRUE)[]
+CENPF_cnacor <- CENPF_cnacor[order(CENPF_cnacor$CENPF_cor8, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_cna_10low <- CENPF_cnacor[1:10]
+CENPF_cna_10high <- tail(CENPF_cnacor, 10)
+#write.csv(CENPF_cna_10low, file='CENPF_cna_10low.csv')
+#write.csv(CENPF_cna_10high, file='CENPF_cna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CENPF_cnacor, aes(x = reorder(rn,CENPF_cnacor$CENPF_cor8), y =CENPF_cnacor$CENPF_cor8, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='CNA CENPF correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+### 9. Protein: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_pro <- as.numeric(tProtein_cormatch2[,'CENPF'])
+CENPF_cor9 <- apply(tProtein_cormatch2,2, function(x){cor(CENPF_pro,x)})
+CENPF_procor <- as.data.frame(CENPF_cor9, header=FALSE)
+CENPF_procor <- na.omit(CENPF_procor)
+CENPF_procor <- setDT(CENPF_procor, keep.rownames = TRUE)[]
+CENPF_procor <- CENPF_procor[order(CENPF_procor$CENPF_cor9, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_pro_10low <- CENPF_procor[1:10]
+CENPF_pro_10high <- tail(CENPF_procor, 10)
+#write.csv(CENPF_pro_10low, file='CENPF_pro_10low.csv')
+#write.csv(CENPF_pro_10high, file='CENPF_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+ggplot(CENPF_procor, aes(x = reorder(rn,CENPF_procor$CENPF_cor9), y =CENPF_procor$CENPF_cor9, group=1)) +
+  geom_line()+
+  labs(x='Genes', y="cor", title='Protein CENPF correlations')+
+  geom_hline(yintercept=0, linetype="dashed", color = "blue")
+
+ylim=c(-1,1)
+```
+
+** all original data table comparation **
+```{r eval=TRUE, results='hold'}
+CNA_Breast <- read.csv('CNA_Breast.csv', header=TRUE)
+Protein_Breast <- read.csv('Protein_Breast.csv', header=TRUE)
+RNA_Breast <- read.csv('RNA_Breast.csv', header=TRUE)
+```
+
+### Rename row and col names
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+getName2 <- function(x){
+  w <- unlist(strsplit(x, '\\-'))
+  w2 <- w[1]
+  return(w2)
+}
+```
+
+<br>
+### columns rename
+```{r eval=TRUE, results='hold'}
+colnames(CNA_Breast)[2:ncol(CNA_Breast)] <- sapply(colnames(CNA_Breast)[-1], getName)
+colnames(Protein_Breast)[2:ncol(Protein_Breast)] <- sapply(colnames(Protein_Breast)[-1], getName)
+colnames(RNA_Breast)[2:ncol(RNA_Breast)] <- sapply(colnames(RNA_Breast)[-1], getName)
+```
+### rename the first col 
+```{r eval=TRUE, results='hold'}
+Protein_Breast[,1] <- sapply(as.character(Protein_Breast[,1]), getName2)
+```
+### and then make it the rowname of data frame
+
+```{r eval=TRUE, results='hold'}
+Protein_Breast_2 <- Protein_Breast[,-1]
+rownames(Protein_Breast_2) <- make.names(Protein_Breast[,1], unique=TRUE)
+Protein_Breast <- Protein_Breast_2
+
+CNA_Breast_2 <- CNA_Breast[,-1]
+rownames(CNA_Breast_2) <- make.names(CNA_Breast[,1], unique=TRUE)
+CNA_Breast <- CNA_Breast_2
+
+RNA_Breast_2 <- RNA_Breast[,-1]
+rownames(RNA_Breast_2) <- make.names(RNA_Breast[,1], unique=TRUE)
+RNA_Breast <- RNA_Breast_2
+
+```
+<br>
+### Find nearest gene of the whole gene table with the 3 gene separately (ERBB2, CCNB1, CENPF)
+```{r eval=TRUE, results='hold'}
+tProtein_Breast <- t(Protein_Breast)
+tCNA_Breast <- t(CNA_Breast)
+tRNA_Breast <- t(RNA_Breast)
+
+tProtein_Breast <- as.data.frame(tProtein_Breast)
+tCNA_Breast <- as.data.frame(tCNA_Breast)
+tRNA_Breast <- as.data.frame(tRNA_Breast)
+```
+
+
+### 2-1. protein: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_pro <- as.numeric(tProtein_Breast[,'ERBB2'])
+ERBB2_cor <- apply(tProtein_Breast,2, function(x){cor(ERBB2_pro,x)})
+ERBB2_procor <- as.data.frame(ERBB2_cor, header=FALSE)
+ERBB2_procor <- na.omit(ERBB2_procor)
+ERBB2_procor <- setDT(ERBB2_procor, keep.rownames = TRUE)[]
+ERBB2_procor <- ERBB2_procor[order(ERBB2_procor$ERBB2_cor, decreasing = FALSE),]
+```
+
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_pro_10low <- ERBB2_procor[1:10]
+ERBB2_pro_10high <- tail(ERBB2_procor, 10)
+#write.csv(ERBB2_pro_10low, file='ERBB2_pro_10low.csv')
+#write.csv(ERBB2_pro_10high, file = 'ERBB2_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p3 <- ggplot(ERBB2_procor, aes(x = reorder(rn,ERBB2_procor$ERBB2_cor), y =ERBB2_procor$ERBB2_cor, group=1, color="red")) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='Protein ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+ylim=c(-1,1)
+#theme(panel.border = element_rect(colour = "black", fill=NA, size=1))+
+```
+
+### 2-2. RNA: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_rna <- as.numeric(tRNA_Breast[,'ERBB2'])
+ERBB2_cor2 <- apply(tRNA_Breast,2, function(x){cor(ERBB2_rna,x)})
+ERBB2_rnacor <- as.data.frame(ERBB2_cor2, header=FALSE)
+ERBB2_rnacor <- na.omit(ERBB2_rnacor)
+ERBB2_rnacor <- setDT(ERBB2_rnacor, keep.rownames = TRUE)[]
+ERBB2_rnacor <- ERBB2_rnacor[order(ERBB2_rnacor$ERBB2_cor2, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_rna_10low <- ERBB2_rnacor[1:10]
+ERBB2_rna_10high <- tail(ERBB2_rnacor, 10)
+#write.csv(ERBB2_rna_10low, file='ERBB2_rna_10low.csv')
+#write.csv(ERBB2_rna_10high, file='ERBB2_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p2 <- ggplot(ERBB2_rnacor, aes(x = reorder(rn,ERBB2_rnacor$ERBB2_cor2), y =ERBB2_rnacor$ERBB2_cor2, group=1, color="red")) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='RNA ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+
+
+ylim=c(-1,1)
+```
+
+### 2-3. CNA: ERBB2
+```{r eval=TRUE, results='hold'}
+ERBB2_cna <- as.numeric(tCNA_Breast[,'ERBB2'])
+ERBB2_cor3 <- apply(tCNA_Breast,2, function(x){cor(ERBB2_cna,x)})
+ERBB2_cnacor <- as.data.frame(ERBB2_cor3, header=FALSE)
+ERBB2_cnacor <- na.omit(ERBB2_cnacor)
+ERBB2_cnacor <- setDT(ERBB2_cnacor, keep.rownames = TRUE)[]
+ERBB2_cnacor <- ERBB2_cnacor[order(ERBB2_cnacor$ERBB2_cor3, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+ERBB2_cna_10low <- ERBB2_cnacor[1:10]
+ERBB2_cna_10high <- tail(ERBB2_cnacor, 10)
+#write.csv(ERBB2_cna_10low, file='ERBB2_cna_10low.csv')
+#write.csv(ERBB2_cna_10high, file='ERBB2_cna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p1 <- ggplot(ERBB2_cnacor, aes(x = reorder(rn,ERBB2_cnacor$ERBB2_cor3), y =ERBB2_cnacor$ERBB2_cor3, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='CNA ERBB2 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+ylim=c(-1,1)
+```
+### 2-4. CNA: CCNB1
+
+```{r eval=TRUE, results='hold'}
+CCNB1_cna <- as.numeric(tCNA_Breast[,'CCNB1'])
+CCNB1_cor4 <- apply(tCNA_Breast,2, function(x){cor(CCNB1_cna,x)})
+CCNB1_cnacor <- as.data.frame(CCNB1_cor4, header=FALSE)
+CCNB1_cnacor <- na.omit(CCNB1_cnacor)
+CCNB1_cnacor <- setDT(CCNB1_cnacor, keep.rownames = TRUE)[]
+CCNB1_cnacor <- CCNB1_cnacor[order(CCNB1_cnacor$CCNB1_cor4, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_cna_10low <- CCNB1_cnacor[1:10]
+CCNB1_cna_10high <- tail(CCNB1_cnacor, 10)
+#write.csv(CCNB1_cna_10low, file='CCNB1_cna_10low.csv')
+#write.csv(CCNB1_cna_10high, file='CCNB1_cna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p4 <- ggplot(CCNB1_cnacor, aes(x = reorder(rn,CCNB1_cnacor$CCNB1_cor4), y =CCNB1_cnacor$CCNB1_cor4, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='CNA CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+
+ylim=c(-1,1)
+```
+
+### 2-5. RNA: CCNB1
+
+```{r eval=TRUE, results='hold'}
+CCNB1_rna <- as.numeric(tRNA_Breast[,'CCNB1'])
+CCNB1_cor5 <- apply(tRNA_Breast,2, function(x){cor(CCNB1_rna,x)})
+CCNB1_rnacor <- as.data.frame(CCNB1_cor5, header=FALSE)
+CCNB1_rnacor <- na.omit(CCNB1_rnacor)
+CCNB1_rnacor <- setDT(CCNB1_rnacor, keep.rownames = TRUE)[]
+CCNB1_rnacor <- CCNB1_rnacor[order(CCNB1_rnacor$CCNB1_cor5, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_rna_10low <- CCNB1_rnacor[1:10]
+CCNB1_rna_10high <- tail(CCNB1_rnacor, 10)
+#write.csv(CCNB1_rna_10low, file='CCNB1_rna_10low.csv')
+#write.csv(CCNB1_rna_10high, file='CCNB1_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p5 <- ggplot(CCNB1_rnacor, aes(x = reorder(rn,CCNB1_rnacor$CCNB1_cor5), y =CCNB1_rnacor$CCNB1_cor5, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='RNA CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+
+ylim=c(-1,1)
+```
+
+### 2-6. Protein: CCNB1
+
+```{r eval=TRUE, results='hold'}
+# delete na for calculate correlations
+CCNB1_pro <- as.numeric(tProtein_Breast[,'CCNB1'])
+CCNB1_pro <- na.omit(CCNB1_pro)
+```
+
+```{r eval=TRUE, results='hold'}
+# to keep compatible dimensions, delete samples(rows) where CCNB1 is NA
+tProtein_Breast <-tProtein_Breast[-c(27, 28,29, 78, 79, 80),]
+CCNB1_cor6 <- apply(tProtein_Breast,2, function(x){cor(CCNB1_pro,x)})
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_procor <- as.data.frame(CCNB1_cor6, header=FALSE)
+CCNB1_procor <- na.omit(CCNB1_procor)
+CCNB1_procor <- setDT(CCNB1_procor, keep.rownames = TRUE)[]
+CCNB1_procor <- CCNB1_procor[order(CCNB1_procor$CCNB1_cor6, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CCNB1_pro_10low <- CCNB1_procor[1:10]
+CCNB1_pro_10low <- tail(CCNB1_procor, 10)
+#write.csv(CCNB1_pro_10low, file='CCNB1_pro_10low.csv')
+#write.csv(CCNB1_pro_10high, file='CCNB1_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p6 <- ggplot(CCNB1_procor, aes(x = reorder(rn,CCNB1_procor$CCNB1_cor6), y =CCNB1_procor$CCNB1_cor6, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='Protein CCNB1 correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+
+ylim=c(-1,1)
+
+```
+
+### 2-7. RNA: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_rna <- as.numeric(tRNA_Breast[,'CENPF'])
+CENPF_cor7 <- apply(tRNA_Breast,2, function(x){cor(CENPF_rna,x)})
+CENPF_rnacor <- as.data.frame(CENPF_cor7, header=FALSE)
+CENPF_rnacor <- na.omit(CENPF_rnacor)
+CENPF_rnacor <- setDT(CENPF_rnacor, keep.rownames = TRUE)[]
+CENPF_rnacor <- CENPF_rnacor[order(CENPF_rnacor$CENPF_cor7, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_rna_10low <- CENPF_rnacor[1:10]
+CENPF_rna_10high <- tail(CENPF_rnacor, 10)
+#write.csv(CENPF_rna_10low, file='CENPF_rna_10low.csv')
+#write.csv(CENPF_rna_10high, file='CENPF_rna_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p8 <- ggplot(CENPF_rnacor, aes(x = reorder(rn,CENPF_rnacor$CENPF_cor7), y =CENPF_rnacor$CENPF_cor7, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size=0.5)+
+  labs(x='Genes', y="cor", title='RNA CENPF correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+
+ylim=c(-1,1)
+
+```
+
+### 2-8. CNA: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_cna <- as.numeric(tCNA_Breast[,'CENPF'])
+CENPF_cor8 <- apply(tCNA_Breast,2, function(x){cor(CENPF_cna,x)})
+CENPF_cnacor <- as.data.frame(CENPF_cor8, header=FALSE)
+CENPF_cnacor <- na.omit(CENPF_cnacor)
+CENPF_cnacor <- setDT(CENPF_cnacor, keep.rownames = TRUE)[]
+CENPF_cnacor <- CENPF_cnacor[order(CENPF_cnacor$CENPF_cor8, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_cna_10low <- CENPF_cnacor[1:10]
+CENPF_cna_10high <- tail(CENPF_cnacor, 10)
+#write.csv(CENPF_cna_10low, file='CENPF_cna_10low.csv')
+#write.csv(CENPF_cna_10high, file='CENPF_cna_10high.csv')
+
+```
+
+```{r eval=TRUE, results='hold'}
+p7 <- ggplot(CENPF_cnacor, aes(x = reorder(rn,CENPF_cnacor$CENPF_cor8), y =CENPF_cnacor$CENPF_cor8, group=1, color='red')) +
+  geom_line(linetype = 'dashed', size = 0.5)+
+  labs(x='Genes', y="cor", title='CNA CENPF correlations')+
+  geom_hline(yintercept=0, linetype='solid', color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+  
+
+ylim=c(-1,1)
+```
+
+### 2-9. Protein: CENPF
+
+```{r eval=TRUE, results='hold'}
+CENPF_pro <- as.numeric(tProtein_Breast[,'CENPF'])
+CENPF_cor9 <- apply(tProtein_Breast,2, function(x){cor(CENPF_pro,x)})
+CENPF_procor <- as.data.frame(CENPF_cor9, header=FALSE)
+CENPF_procor <- na.omit(CENPF_procor)
+CENPF_procor <- setDT(CENPF_procor, keep.rownames = TRUE)[]
+CENPF_procor <- CENPF_procor[order(CENPF_procor$CENPF_cor9, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# 10 most neg and 10 most pos
+CENPF_pro_10low <- CENPF_procor[1:10]
+CENPF_pro_10high <- tail(CENPF_procor, 10)
+#write.csv(CENPF_pro_10low, file='CENPF_pro_10low.csv')
+#write.csv(CENPF_pro_10high, file='CENPF_pro_10high.csv')
+```
+
+```{r eval=TRUE, results='hold'}
+p9 <- ggplot(CENPF_procor, aes(x = reorder(rn,CENPF_procor$CENPF_cor9), y =CENPF_procor$CENPF_cor9, group=1, color="red")) +
+  geom_line(linetype = 'dashed', size = 0.5)+
+  labs(x='Genes', y="cor", title='Protein CENPF correlations')+
+  geom_hline(yintercept=0, linetype="solid", color = "forestgreen")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(), plot.title=element_text(size=22))
+ylim=c(-1,1)
+```
+
+```{r}
+#library(ggpubr)
+jpeg('Correlation_3genes/gathered.jpeg')
+ggarrange(p1,p2,p3,p4,p5,p6,p7,p8,p9 + rremove("x.text"), 
+          labels = c("A", "B", "C",'D', 'E', 'F', 'G', 'H'),
+          ncol = 3, nrow = 3)
+dev.off()
+```
+### GSEA analysis
+resource:
+https://www.jianshu.com/p/d39b0852fc43
+
+

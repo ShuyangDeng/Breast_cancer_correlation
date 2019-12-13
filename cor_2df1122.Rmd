@@ -1,0 +1,104 @@
+---
+title: "Cor_2dfs filter"
+author: "Shuyang"
+date: "11/12/2019"
+output: html_document: default
+  pdf_document: default
+---
+
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6,fig.height = 3)
+```
+
+<br>
+```{r eval=TRUE, results='hold'}
+##homework2019.11.13
+
+#function-3
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+```
+
+```{r eval=TRUE, results='hold'}
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+
+P <- read.csv('Protein_Breast_2.csv', stringsAsFactors = FALSE, header = TRUE)
+R <- read.csv('RNA_Breast_2.csv', stringsAsFactors = FALSE, header = TRUE)
+```
+
+```{r eval=TRUE, results='hold'}
+## 获取相同的列
+cols.P <- data.frame(P = colnames(P), stringsAsFactors = FALSE)
+cols.R <- data.frame(R = colnames(R), stringsAsFactors = FALSE)
+cols.same <- merge(cols.P, cols.R, by.x = 'P', by.y = 'R')
+
+## 筛选相同的列数据
+P.fiter.col <- P[, cols.same$P]
+R.fiter.col <- R[, cols.same$P]
+
+```
+
+```{r eval=TRUE, results='hold'}
+# 针对P.fiter.col 的列加上P 标签
+colnames(P.fiter.col) <- paste0('P_', colnames(P.fiter.col))
+colnames(R.fiter.col) <- paste0('R_', colnames(R.fiter.col))
+
+## innerjoin 数据
+PR <- merge(P.fiter.col, R.fiter.col, by.x = 'P_X', by.y = 'R_X')
+PR <- PR[, -1]
+PR <- as.matrix(PR)
+
+```
+
+```{r eval=TRUE, results='hold'}
+## 计算相关系数
+corr.PR <- cor(PR, use = "complete.obs")
+corr.PR <- as.data.frame(corr.PR)
+corr.PR$P <- row.names(corr.PR)
+
+```
+
+
+```{r eval=TRUE, results='hold'}
+corr.PR <- gather(corr.PR, 'R', 'corr', -P)
+corr.tmp <- corr.PR %>% 
+  mutate(
+    P_F = substring(P, 1, 1), 
+    R_F = substring(R, 1, 1)
+  ) %>% 
+  filter(P_F == 'P') %>% 
+  filter(R_F == 'R') %>% 
+  mutate(
+    gene_P = gsub('P_', '', P), 
+    gene_R = gsub('R_', '', R)
+  ) %>% select(gene_P, gene_R, corr)
+
+
+```
+
+```{r eval=TRUE, results='hold'}
+# 判别相同基因的是否小于0.3
+corr.same <- corr.tmp %>% filter(gene_P == gene_R) %>% 
+  filter(abs(corr) < 0.3)
+```
+
+```{r eval=TRUE, results='hold'}
+# 结果筛选
+corr.result <- rbind(
+  # 相同部分
+  corr.tmp %>% 
+    filter(gene_P %in% corr.same$gene_P) %>% 
+    filter(gene_P == gene_R) %>% mutate(cor = '<0.3'), 
+  # 不相同部分
+  corr.tmp %>% 
+    filter(gene_P %in% corr.same$gene_P) %>% 
+    filter(abs(corr) > 0.6) %>% mutate(cor = '>0.6')
+) %>% arrange(gene_P, gene_R)
+```
+
+
+
+
+

@@ -1,0 +1,661 @@
+---
+title: "Breast data processing"
+author: "Shuyang"
+date: "10/6/2019"
+output: 
+  html_document: default
+  pdf_document: default
+---
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6)
+```
+<br>
+```{r eval=TRUE, results='hold'}
+#library(plyr)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(colorspace)
+library(data.table)
+library(gplots)
+library( "genefilter" )
+library(ggplot2)
+library(NMF)
+library(pkgmaker)
+library(registry)
+library(rngtools)
+library(cluster)
+
+library('heatmap.plus')
+library('gplots')
+library('RColorBrewer')
+library("pheatmap")
+#kde function
+library(ks)
+library(rgl)
+library("kdensity")
+```
+
+```{r eval=TRUE, results='hold'}
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+CNA_Breast <- read.csv('CNA_Breast.csv', header=TRUE)
+#Phospho_Breast <- read.csv('Phospho_Breast.csv', header=TRUE)
+Protein_Breast <- read.csv('Protein_Breast.csv', header=TRUE)
+RNA_Breast <- read.csv('RNA_Breast.csv', header=TRUE)
+```
+<br>
+
+### Rename row and col names
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+getName2 <- function(x){
+  w <- unlist(strsplit(x, '\\-'))
+  w2 <- w[1]
+  return(w2)
+}
+```
+
+<br>
+### columns rename
+```{r eval=TRUE, results='hold'}
+colnames(CNA_Breast)[2:ncol(CNA_Breast)] <- sapply(colnames(CNA_Breast)[-1], getName)
+#colnames(Phospho_Breast)[2:ncol(Phospho_Breast)] <- sapply(colnames(Phospho_Breast)[-1], getName)
+colnames(Protein_Breast)[2:ncol(Protein_Breast)] <- sapply(colnames(Protein_Breast)[-1], getName)
+colnames(RNA_Breast)[2:ncol(RNA_Breast)] <- sapply(colnames(RNA_Breast)[-1], getName)
+```
+### rename the first col 
+```{r eval=TRUE, results='hold'}
+Protein_Breast[,1] <- sapply(as.character(Protein_Breast[,1]), getName2)
+```
+### and then make it the rowname of data frame
+
+```{r eval=TRUE, results='hold'}
+Protein_Breast_2 <- Protein_Breast[,-1]
+rownames(Protein_Breast_2) <- make.names(Protein_Breast[,1], unique=TRUE)
+Protein_Breast <- Protein_Breast_2
+
+CNA_Breast_2 <- CNA_Breast[,-1]
+rownames(CNA_Breast_2) <- make.names(CNA_Breast[,1], unique=TRUE)
+CNA_Breast <- CNA_Breast_2
+
+RNA_Breast_2 <- RNA_Breast[,-1]
+rownames(RNA_Breast_2) <- make.names(RNA_Breast[,1], unique=TRUE)
+RNA_Breast <- RNA_Breast_2
+
+#Phospho_Breast_2 <- Phospho_Breast[,-1]
+#rownames(Phospho_Breast_2) <- make.names(Phospho_Breast[,1], unique=TRUE)
+#Phospho_Breast <- Phospho_Breast_2
+```
+
+```{r eval=TRUE, results='hold'}
+#write.csv(Protein_Breast_2, file='Protein_Breast_2.csv')
+#write.csv(RNA_Breast_2, file='RNA_Breast_2.csv')
+#write.csv(CNA_Breast_2, file='CNA_Breast_2.csv')
+```
+
+<br>
+### overlapping version
+```{r eval=TRUE, results='hold'}
+# overlap as Protein_match, RNA_match2, CNA_match2 by protein_breast rownames
+RNA_match <- RNA_Breast[rownames(RNA_Breast) %in% rownames(Protein_Breast),]
+CNA_match <- CNA_Breast[rownames(CNA_Breast) %in% rownames(Protein_Breast),]
+CNA_match2 <- CNA_match[rownames(CNA_match) %in% rownames(RNA_match),]
+RNA_match2 <- RNA_match[rownames(RNA_match) %in% rownames(CNA_match2),]
+Protein_match <- Protein_Breast[rownames(Protein_Breast) %in% rownames(CNA_match2),]
+```
+
+```{r eval=TRUE, results='hold'}
+# overlap as Protein_match, RNA_match2, CNA_match2 by protein_breast rownames
+which(!(colnames(Protein_match) %in% colnames(CNA_match2)))
+Protein_match2 <- Protein_match[-c(10, 68, 74, 81, 82, 83)]
+```
+
+```{r eval=TRUE, results='hold'}
+## save
+#write.csv(Protein_match2, file='Protein_match2.csv')
+#write.csv(RNA_match2, file='RNA_match2.csv')
+#write.csv(CNA_match2, file='CNA_match2.csv')
+```
+
+### missing data plot
+**resource:** https://jenslaufer.com/data/analysis/visualize_missing_values_with_ggplot.html
+```{r eval=TRUE, results='hold'}
+colSums(is.na(Protein_match2))
+print('--------------------------------')
+rowSums(is.na(Protein_match2))
+```
+
+```{r eval=TRUE, results='hold'}
+# Sample missing values
+Protein_missdf <- Protein_match2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  dplyr::summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing)) 
+  #summarise(n = n())
+```
+
+```{r eval=TRUE, results='hold'}
+CNA_missdf <- CNA_match2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  dplyr::summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing))
+```
+
+```{r eval=TRUE, results='hold'}
+RNA_missdf <- RNA_match2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  dplyr::summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing))
+```
+
+```{r eval=TRUE, results='hold'}
+Protein_missdf %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(key, -num.missing), y=num.missing), stat = 'identity', col='#E69F00', fill='#E69F00') +
+  labs(x='Samples', y="number of missing values", title='Protein samples missing values') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=5), plot.title=element_text(size=22))
+```
+
+```{r eval=TRUE, results='hold'}
+RNA_missdf %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(key, -num.missing), y=num.missing), stat = 'identity',width=1) +
+  labs(x='Samples', y="number of missing values", title='RNA samples missing values') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=5), plot.title=element_text(size=22))
+```
+
+
+```{r eval=TRUE, results='hold'}
+# Gene missing values
+# get T-matrix and then convert the matrix to datafram
+tProtein_match2 <- t(Protein_match2)
+tProtein_match2 <- as.data.frame(tProtein_match2)
+```
+
+```{r eval=TRUE, results='hold'}
+# Gene missing values
+# get T-matrix and then convert the matrix to datafram
+tRNA_match2 <- t(RNA_match2)
+tRNA_match2 <- as.data.frame(tRNA_match2)
+```
+
+```{r eval=TRUE, results='hold'}
+# Gene missing values
+Protein_missdf_gene <- tProtein_match2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  dplyr::summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) 
+
+
+```
+
+```{r eval=TRUE, results='hold'}
+# Gene missing values
+RNA_missdf_gene <- tRNA_match2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  dplyr::summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing))
+
+```
+
+```{r eval=TRUE, results='hold'}
+Protein_missdf_gene %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(key, -num.missing), y=num.missing), stat = 'identity', width=1)+
+  labs(x='gene', y="number of missing values", title='Protein genes missing values') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=1),plot.title=element_text(size=22))
+```
+**plot generates wide white anf grey bars, use width=1 to avoid it, which can make bars assemble together**
+```{r eval=TRUE, results='hold'}
+RNA_missdf_gene %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(key, -num.missing), y=num.missing), stat = 'identity', width=1) +
+  #width is used to remove color difference generated by barplot
+  labs(x='gene', y="number of missing values", title='RNA genes missing values') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size=1),plot.title=element_text(size=22))
+
+```
+
+```{r eval=TRUE, results='hold'}
+#vis_miss(tProtein_match2)
+```
+<br>
+### ERBB2 protein-rna
+```{r eval=TRUE, results='hold'}
+df1 <- Protein_match2['ERBB2',]
+df2 <- RNA_match2['ERBB2',]
+df3 <- CNA_match2['ERBB2',]
+#df1_match <- df1[colnames(df2)]
+df <- rbind(df1, df2)
+df23 <- rbind(df2,df3)
+df13 <- rbind(df1,df3)
+rownames(df) <- c('ERBB2_Protein', 'ERBB2_RNA')
+rownames(df13) <- c('ERBB2_Protein', 'ERBB2_CNA')
+rownames(df23) <- c('ERBB2_RNA', 'ERBB2_CNA')
+```
+### CCNB1 protein-rna
+```{r eval=TRUE, results='hold'}
+cdf1 <- Protein_match2['CCNB1',]
+cdf2 <- RNA_match2['CCNB1',]
+cdf3 <- CNA_match2['CCNB1',]
+#df1_match <- df1[colnames(df2)]
+cdf <- rbind(cdf1, cdf2)
+cdf23 <- rbind(cdf2,cdf3)
+cdf13 <- rbind(cdf1,cdf3)
+rownames(cdf) <- c('CCNB1_Protein', 'CCNB1_RNA')
+rownames(cdf13) <- c('CCNB1_Protein', 'CCNB1_CNA')
+rownames(cdf23) <- c('CCNB1_RNA', 'CCNB1_CNA')
+```
+
+### CENPF protein-rna
+```{r eval=TRUE, results='hold'}
+ddf1 <- Protein_match2['CENPF',]
+ddf2 <- RNA_match2['CENPF',]
+ddf3 <- CNA_match2['CENPF',]
+#df1_match <- df1[colnames(df2)]
+ddf <- rbind(ddf1, ddf2)
+ddf23 <- rbind(ddf2,ddf3)
+ddf13 <- rbind(ddf1,ddf3)
+rownames(ddf) <- c('CENPF_Protein', 'CENPF_RNA')
+rownames(ddf13) <- c('CENPF_Protein', 'CENPF_CNA')
+rownames(ddf23) <- c('CENPF_RNA', 'CENPF_CNA')
+```
+
+
+
+```{r eval=TRUE, results='hold'}
+tdf <- t(df)
+tdf <- data.frame(tdf)
+g1 <- ggplot(data=tdf)+
+  geom_point(mapping=aes(x=tdf$ERBB2_RNA, y=tdf$ERBB2_Protein))+
+  labs(x='RNA', y="Protein", title='ERBB2 RNA-protein')+
+  theme(plot.title=element_text(size=22))
+g1
+```
+```{r eval=TRUE, results='hold'}
+tdf23 <- t(df23)
+tdf23 <- data.frame(tdf23)
+g2 <- ggplot(data=tdf23)+
+  geom_point(mapping=aes(x=tdf23$ERBB2_RNA, y=tdf23$ERBB2_CNA))+
+  labs(x='RNA', y="CNA", title='ERBB2 RNA-CNA')+
+  theme(plot.title=element_text(size=22))
+g2
+```
+
+```{r eval=TRUE, results='hold'}
+#ccnb1
+tcdf <- t(cdf)
+tcdf <- data.frame(tcdf)
+g4 <- ggplot(data=tcdf)+
+  geom_point(mapping=aes(x=tcdf$CCNB1_RNA, y=tcdf$CCNB1_Protein))+
+  labs(x='RNA', y="Protein", title='CCNB1 RNA-protein')+
+  theme(plot.title=element_text(size=22))
+g4
+```
+
+```{r eval=TRUE, results='hold'}
+#ccnb1
+tcdf23 <- t(cdf23)
+tcdf23 <- data.frame(tcdf23)
+g5 <- ggplot(data=tcdf23)+
+  geom_point(mapping=aes(x=tcdf23$CCNB1_RNA, y=tcdf23$CCNB1_CNA))+
+  labs(x='RNA', y="CNA", title='CCNB1 RNA-CNA')+
+  theme(plot.title=element_text(size=22))
+g5
+```
+```{r eval=TRUE, results='hold'}
+tdf13 <- t(df13)
+tdf13 <- data.frame(tdf13)
+g3 <- ggplot(data=tdf13)+
+  geom_point(mapping=aes(x=tdf13$ERBB2_CNA, y=tdf13$ERBB2_Protein))+
+  labs(x='CNA', y="Protein", title='ERBB2 CNA-protein')+
+  theme(plot.title=element_text(size=22))
+g3
+```
+```{r eval=TRUE, results='hold'}
+#ccnb1
+tcdf13 <- t(cdf13)
+tcdf13 <- data.frame(tcdf13)
+g6 <- ggplot(data=tcdf13)+
+  geom_point(mapping=aes(x=tcdf13$CCNB1_CNA, y=tcdf13$CCNB1_Protein))+
+  labs(x='CNA', y="Protein", title='CCNB1 CNA-protein')+
+  theme(plot.title=element_text(size=22))
+g6
+```
+```{r eval=TRUE, results='hold'}
+#cenpf
+tddf <- t(ddf)
+tddf <- data.frame(tddf)
+g7 <- ggplot(data=tddf)+
+  geom_point(mapping=aes(x=tddf$CENPF_RNA, y=tddf$CENPF_Protein))+
+  labs(x='RNA', y="Protein", title='CENPF RNA-protein')+
+  theme(plot.title=element_text(size=22))
+g7
+```
+```{r eval=TRUE, results='hold'}
+#cENPF
+tddf23 <- t(ddf23)
+tddf23 <- data.frame(tddf23)
+g8 <- ggplot(data=tddf23)+
+  geom_point(mapping=aes(x=tddf23$CENPF_RNA, y=tddf23$CENPF_CNA))+
+  labs(x='RNA', y="CNA", title='CENPF RNA-CNA')+
+  theme(plot.title=element_text(size=22))
+g8
+```
+```{r eval=TRUE, results='hold'}
+#cenpf
+tddf13 <- t(ddf13)
+tddf13 <- data.frame(tddf13)
+g9 <- ggplot(data=tddf13)+
+  geom_point(mapping=aes(x=tddf13$CENPF_CNA, y=tddf13$CENPF_Protein))+
+  labs(x='CNA', y="Protein", title='CENPF CNA-protein')+
+  theme(plot.title=element_text(size=22))
+g9
+```
+```{r}
+library(ggpubr)
+ggarrange(g1,g2,g3,g4,g5,g6,g7,g8,g9 + rremove("x.text"), 
+          labels = c("A", "B", "C",'D', 'E', 'F', 'G', 'H'),
+          ncol = 3, nrow = 3)
+          
+```
+# heatmap - coordinate coefficience
+```{r eval=TRUE, results='hold'}
+# 数据导入
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+Protein_Breast <- read.csv('Protein_Breast_2.csv', stringsAsFactors = FALSE)
+RNA_Breast <- read.csv('RNA_Breast_2.csv', stringsAsFactors = FALSE)
+CNA_Breast <- read.csv('CNA_Breast_2.csv', stringsAsFactors = FALSE)
+pam50_genes <- read.csv('pam50_genes.csv', stringsAsFactors = FALSE)
+```
+
+
+```{r eval=TRUE, results='hold'}
+# 数据筛选
+Protein_Breast <- merge(pam50_genes, Protein_Breast, by.y = 'X', by.x = 'gene') #inner join if don't use all.x=TRUE
+RNA_Breast <- merge(pam50_genes, RNA_Breast, by.y = 'X', by.x = 'gene', all.x = TRUE)
+CNA_Breast <- merge(pam50_genes, CNA_Breast, by.y='X', by.x='gene')
+```
+
+```{r eval=TRUE, results='hold'}
+# 数据转换
+row.names(Protein_Breast) <- Protein_Breast$gene
+Protein_Breast <- select(Protein_Breast, -gene) 
+Protein_Breast <- as.matrix(Protein_Breast)
+
+row.names(RNA_Breast) <- RNA_Breast$gene
+RNA_Breast <- select(RNA_Breast, -gene)
+RNA_Breast <- as.matrix(RNA_Breast)
+
+rownames(CNA_Breast) <- CNA_Breast$gene
+CNA_Breast <- select(CNA_Breast, -gene)
+CNA_Breast <- as.matrix(CNA_Breast)
+```
+### making heatmap
+resource: https://wiki.bits.vib.be/index.php/Use_pheatmap_to_draw_heat_maps_in_R
+```{r eval=TRUE, results='hold'}
+# Protein-protein
+col.pal <- brewer.pal(9,"Blues")
+drows1 <- "euclidean"
+dcols1 <- "euclidean"
+
+hm.parameters <- list(Protein_Breast, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "Protein-Protein heatmap",
+  clustering_method = "average",
+  cluster_rows = TRUE, cluster_cols = TRUE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 5
+  )
+ 
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters)
+```
+
+```{r eval=TRUE, results='hold'}
+#RNA-RNA
+
+hm.parameters2 <- list(RNA_Breast, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = 'column',
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "Protein-Protein heatmap",
+  clustering_method = "average",
+  cluster_rows = TRUE, cluster_cols = TRUE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize = 5)
+ 
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters2)
+```
+
+```{r eval=TRUE, results='hold'}
+#CNA-CNA
+
+hm.parameters3 <- list(CNA_Breast, 
+  color = col.pal,
+  cellwidth = 4, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "Protein-Protein heatmap",
+  clustering_method = "average",
+  cluster_rows = TRUE, cluster_cols = TRUE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize=5)
+ 
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters3)
+```
+
+```{r eval=TRUE, results='hold'}
+#Protein-RNA
+#distrinct pro and rna
+Protein_Breast <- read.csv('Protein_Breast_2.csv', stringsAsFactors = FALSE)
+RNA_Breast <- read.csv('RNA_Breast_2.csv', stringsAsFactors = FALSE)
+CNA_Breast <- read.csv('CNA_Breast_2.csv', stringsAsFactors = FALSE)
+pam50_genes <- read.csv('pam50_genes.csv', stringsAsFactors = FALSE)
+
+colnames(Protein_Breast) <- paste0(colnames(Protein_Breast), '_pro')
+colnames(RNA_Breast) <- paste0(colnames(RNA_Breast), '_rna')
+
+#pro_rna <- merge(pam50_genes, Protein_Breast, by.x = 'gene', by.y = 'X_pro', all.x = TRUE)
+#pro_rna <- merge(pro_rna, RNA_Breast, by.x = 'gene', by.y = 'X_rna', all.x = TRUE)
+
+#row.names(pro_rna) <- pro_rna$gene
+#pro_rna <- select(pro_rna, -gene)
+#pro_rna <- as.matrix(pro_rna)
+ 
+```
+<br>
+```{r eval=TRUE, results='hold'}
+#Protein-RNA
+
+hm.parameters4 <- list(pro_rna, 
+  color = col.pal,
+  cellwidth = 5, cellheight = 5, scale = "none",
+  treeheight_row = 200,
+  kmeans_k = NA,
+  show_rownames = T, show_colnames = T,
+  main = "Protein-Protein heatmap",
+  clustering_method = "average",
+  cluster_rows = TRUE, cluster_cols = TRUE,
+  clustering_distance_rows = drows1, 
+  clustering_distance_cols = dcols1,
+  fontsize=5)
+ 
+```
+
+```{r eval=TRUE, results='hold'}
+do.call("pheatmap", hm.parameters4)
+```
+
+
+#k means, remove na
+Protein_Breast <- na.omit(Protein_Breast)
+maxclust <- 5
+for(maxclust in c(2:maxclust)) {
+ 
+  main <- paste("result for ", maxclust, " clusters", sep="")
+  hmx.parameters5 <- list(Protein_Breast, 
+                         color = col.pal,
+                         cellwidth = 4, cellheight = 5, scale = "none",
+                         treeheight_row = 200,
+                         kmeans_k = maxclust,
+                         show_rownames = T, show_colnames = T, 
+                         main = main,
+                         clustering_method = "average",
+                         cluster_rows = TRUE, cluster_cols = TRUE,
+                         clustering_distance_rows = drows1, 
+                         clustering_distance_cols = dcols1)
+  kmean.hm <- do.call("pheatmap", hmx.parameters5)
+  do.call("pheatmap", hmx.parameters5)
+  clustnum <- kmean.hm[["kmeans"]][["cluster"]]
+  clustered.Protein_Breast <- cbind(Protein_Breast, clustnum)
+  last <- ncol(clustered.Protein_Breast)-1
+}
+
+
+
+  filename <- paste("Clustered.for.", maxclust, "-clusters.tsv", sep="")
+  outfile <- paste(basedir, filename, sep="/")
+  
+  write.table(clustered.Protein_Breast, file=outfile, quote = FALSE, sep="\t", 
+              col.names = T, row.names = T)
+ 
+  # plot 'maxclust' cluster detailed heatmap's
+  clustered.Protein_Breast <- as.data.frame(clustered.Protein_Breast)
+  
+  for (clust in 1:maxclust){
+    # sample data
+    cluster <- subset(clustered.Protein_Breast,    clustered.Protein_Breast$clustnum==clust)[1:last]
+ 
+    # prepare output
+    filename <- paste("cluster.", clust, "_of_", maxclust,".pdf", sep="")
+    outfile <- paste(basedir, filename, sep="/")
+ 
+    main <- paste("cluster #", clust, " of #", maxclust, sep="")
+ 
+    cluster.parameters6 <- list(cluster,
+                               color = col.pal,
+                               cellwidth = 4, cellheight = 5,
+                               scale = "none",
+                               treeheight_row = 200,
+                               kmeans_k = NA,
+                               show_rownames = T, show_colnames = T, 
+                               main = main,
+                               clustering_method = "average",
+                               cluster_rows = TRUE, cluster_cols = TRUE,
+                               clustering_distance_rows = drows1,
+                               clustering_distance_cols = dcols1)
+    do.call("pheatmap", cluster.parameters6)
+    do.call("pheatmap", c(cluster.parameters6, filename=outfile))
+  }
+}
+ 
+  
+
+
+
+
+**above**
+
+
+### other ways to make heatmap
+
+```{r eval=TRUE, results='hold'}
+# 画图
+#rc.PB <- rainbow(nrow(Protein_Breast), start = 0, end = .3)
+#cc.PB <- rainbow(ncol(Protein_Breast), start = 0, end = .3)
+#hv.PB <- heatmap(
+#  Protein_Breast, col = cm.colors(256), scale = "column",
+#  RowSideColors = rc.PB, ColSideColors = cc.PB, margins = c(5,10),
+#  xlab = " ", ylab =  " ",
+#  main = "Protein_Breast"
+#)
+```
+
+```{r eval=TRUE, results='hold'}
+#rc.RB <- rainbow(nrow(RNA_Breast), start = 0, end = .3)
+#cc.RB <- rainbow(ncol(RNA_Breast), start = 0, end = .3)
+#hv.RB <- heatmap.2(
+#  RNA_Breast, col = cm.colors(256), scale = "column",
+#  RowSideColors = rc.RB, ColSideColors = cc.RB, margins = c(5,10),
+#  xlab = " ", ylab =  " ",
+#  main = "RNA_Breast"
+#)
+```
+
+
+# 第三幅图
+# =====================
+Protein_Breast <- read.csv('Protein_Breast.csv', stringsAsFactors = FALSE)
+RNA_Breast <- read.csv('RNA_Breast.csv', stringsAsFactors = FALSE)
+pam50_genes <- read.csv('pam50_genes.csv', stringsAsFactors = FALSE)
+
+colnames(Protein_Breast) <- paste0(colnames(Protein_Breast), '_pro')
+colnames(RNA_Breast) <- paste0(colnames(RNA_Breast), '_rna')
+
+data <- merge(pam50_genes, Protein_Breast, by.x = 'gene', by.y = 'X_pro', all.x = TRUE)
+data <- merge(data, RNA_Breast, by.x = 'gene', by.y = 'X_rna', all.x = TRUE)
+
+row.names(data) <- data$gene
+data <- select(data, -gene)
+data <- as.matrix(data)
+
+rc <- rainbow(nrow(data), start = 0, end = .3)
+cc <- rainbow(ncol(data), start = 0, end = .3)
+hv <- heatmap(
+  data, col = cm.colors(256), scale = "column",
+  RowSideColors = rc, ColSideColors = cc, margins = c(5,10),
+  xlab = " ", ylab =  " ",
+  main = "data"
+)
+
+
+
+
+
+

@@ -1,0 +1,463 @@
+---
+title: "1113breast make gene pairs scatter plot for ERBB2, CCNB1, and CENPF separatly"
+author: "Shuyang"
+date: "11/12/2019"
+output: html_document: default
+  pdf_document: default
+---
+
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6,fig.height = 3)
+```
+<br>
+```{r eval=FALSE}
+library(tidyverse)
+library(dplyr)
+library(data.table)
+library(lubridate)
+```
+
+```{r eval=TRUE, results='hold'}
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+CNA_Breast <- read.csv('CNA_Breast.csv', header=TRUE)
+Protein_Breast <- read.csv('Protein_Breast.csv', header=TRUE)
+RNA_Breast <- read.csv('RNA_Breast.csv', header=TRUE)
+```
+
+### Rename row and col names
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+getName2 <- function(x){
+  w <- unlist(strsplit(x, '\\-'))
+  w2 <- w[1]
+  return(w2)
+}
+```
+
+<br>
+### columns rename
+```{r eval=TRUE, results='hold'}
+colnames(CNA_Breast)[2:ncol(CNA_Breast)] <- sapply(colnames(CNA_Breast)[-1], getName)
+colnames(Protein_Breast)[2:ncol(Protein_Breast)] <- sapply(colnames(Protein_Breast)[-1], getName)
+colnames(RNA_Breast)[2:ncol(RNA_Breast)] <- sapply(colnames(RNA_Breast)[-1], getName)
+```
+### rename the first col 
+```{r eval=TRUE, results='hold'}
+Protein_Breast[,1] <- sapply(as.character(Protein_Breast[,1]), getName2)
+```
+### and then make it the rowname of data frame
+
+```{r eval=TRUE, results='hold'}
+Protein_Breast_2 <- Protein_Breast[,-1]
+rownames(Protein_Breast_2) <- make.names(Protein_Breast[,1], unique=TRUE)
+Protein_Breast <- Protein_Breast_2
+
+CNA_Breast_2 <- CNA_Breast[,-1]
+rownames(CNA_Breast_2) <- make.names(CNA_Breast[,1], unique=TRUE)
+CNA_Breast <- CNA_Breast_2
+
+RNA_Breast_2 <- RNA_Breast[,-1]
+rownames(RNA_Breast_2) <- make.names(RNA_Breast[,1], unique=TRUE)
+RNA_Breast <- RNA_Breast_2
+
+```
+<br>
+# make gene pairs scatter plot for ERBB2, CCNB1, and CENPF separatly
+```{r eval=TRUE, results='hold'}
+tProtein_Breast <- t(Protein_Breast)
+tCNA_Breast <- t(CNA_Breast)
+tRNA_Breast <- t(RNA_Breast)
+
+tProtein_Breast <- as.data.frame(tProtein_Breast)
+tCNA_Breast <- as.data.frame(tCNA_Breast)
+tRNA_Breast <- as.data.frame(tRNA_Breast)
+```
+
+### 1. ERBB2 pairs
+```{r eval=TRUE, results='hold'}
+#protein ERBB2
+ERBB2_pro <- as.numeric(tProtein_Breast[,'ERBB2'])
+ERBB2_cor_pro <- apply(tProtein_Breast,2, function(x){cor(ERBB2_pro,x)})
+ERBB2_procor <- as.data.frame(ERBB2_cor_pro, header=FALSE)
+ERBB2_procor <- na.omit(ERBB2_procor)
+ERBB2_procor <- setDT(ERBB2_procor, keep.rownames = TRUE)[]
+ERBB2_procor <- ERBB2_procor[order(ERBB2_procor$ERBB2_cor_pro, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+#RNA ERBB2
+ERBB2_rna <- as.numeric(tRNA_Breast[,'ERBB2'])
+ERBB2_cor_rna <- apply(tRNA_Breast,2, function(x){cor(ERBB2_rna,x)})
+ERBB2_rnacor <- as.data.frame(ERBB2_cor_rna, header=FALSE)
+ERBB2_rnacor <- na.omit(ERBB2_rnacor)
+ERBB2_rnacor <- setDT(ERBB2_rnacor, keep.rownames = TRUE)[]
+ERBB2_rnacor <- ERBB2_rnacor[order(ERBB2_rnacor$ERBB2_cor_rna, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# CNA ERBB2
+ERBB2_cna <- as.numeric(tCNA_Breast[,'ERBB2'])
+ERBB2_cor_cna <- apply(tCNA_Breast,2, function(x){cor(ERBB2_cna,x)})
+ERBB2_cnacor <- as.data.frame(ERBB2_cor_cna, header=FALSE)
+ERBB2_cnacor <- na.omit(ERBB2_cnacor)
+ERBB2_cnacor <- setDT(ERBB2_cnacor, keep.rownames = TRUE)[]
+ERBB2_cnacor <- ERBB2_cnacor[order(ERBB2_cnacor$ERBB2_cor_cna, decreasing = FALSE),]
+```
+# 1-1.pro-rna ERBB2 pairs scatter plot
+```{r eval=TRUE, results='hold'}
+# pro-rna
+plot.data1 <- ERBB2_procor %>% 
+  inner_join(
+    ERBB2_rnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+ERBB2_pro_rna <- ggplot(plot.data1, aes(x = ERBB2_cor_rna, y = ERBB2_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("Protein value") + 
+  ggtitle("ERBB2 RNA-protein")+
+  theme(plot.title=element_text(size=22))
+ERBB2_pro_rna
+#ggsave('ERBB2_pro_rna.jpeg')
+```
+## make table to show high cor for both pro and rna with ERBB2
+```{r eval=TRUE, results='hold'}
+highprorna_erbb2 <- plot.data1 %>% filter(ERBB2_cor_pro>0.7 & ERBB2_cor_rna> 0.7) 
+
+highprorna_erbb2 <- highprorna_erbb2[order(highprorna_erbb2$ERBB2_cor_pro,decreasing=TRUE),] 
+#write.csv(highprorna_erbb2, file='9_highcor_tables/highprorna_erbb2.csv')
+```
+
+# 1-2. cna-rna ERBB2 pairs scatter plot
+```{r eval=TRUE, results='hold'}
+# cna-rna
+plot.data2 <- ERBB2_cnacor %>% 
+  inner_join(
+    ERBB2_rnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+ERBB2_cna_rna <- ggplot(plot.data2, aes(x = ERBB2_cor_rna, y = ERBB2_cor_cna)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("CNA value") + 
+  ggtitle("ERBB2 RNA-CNA")+
+  theme(plot.title=element_text(size=22))
+ERBB2_cna_rna
+#ggsave('ERBB2_cna_rna.jpeg')
+```
+
+```{r eval=TRUE, results='hold'}
+highcnarna_erbb2 <- plot.data2 %>% filter(ERBB2_cor_cna>0.7 & ERBB2_cor_rna> 0.7) 
+
+highcnarna_erbb2 <- highcnarna_erbb2[order(highcnarna_erbb2$ERBB2_cor_cna,decreasing=TRUE),] 
+#write.csv(highcnarna_erbb2, file='9_highcor_tables/highcnarna_erbb2.csv')
+```
+
+# 1-3. cna-pro ERBB2 pairs scatter plot
+```{r eval=TRUE, results='hold'}
+# cna-pro
+plot.data3 <- ERBB2_cnacor %>% 
+  inner_join(
+    ERBB2_procor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+ERBB2_cna_pro <- ggplot(plot.data3, aes(x = ERBB2_cor_cna, y = ERBB2_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("CNA value") + 
+  ylab("Protein value") + 
+  ggtitle("ERBB2 CNA-protein")+
+  theme(plot.title=element_text(size=22))
+ERBB2_cna_pro
+#ggsave('gene_pair_plots/ERBB2_cna_pro.jpeg')
+```
+
+```{r eval=TRUE, results='hold'}
+highcnapro_erbb2 <- plot.data3 %>% filter(ERBB2_cor_pro>0.3 & ERBB2_cor_cna> 0.3) 
+
+highcnapro_erbb2 <- highcnapro_erbb2[order(highcnapro_erbb2$ERBB2_cor_cna,decreasing=TRUE),] 
+write.csv(highcnapro_erbb2, #file='9_highcor_andsamplenumber_tables/highcnapro_erbb2.csv')
+```
+
+
+# CCNB1 pairs
+```{r eval=TRUE, results='hold'}
+# CNA CCNB1
+CCNB1_cna <- as.numeric(tCNA_Breast[,'CCNB1'])
+CCNB1_cor_cna <- apply(tCNA_Breast,2, function(x){cor(CCNB1_cna,x)})
+CCNB1_cnacor <- as.data.frame(CCNB1_cor_cna, header=FALSE)
+CCNB1_cnacor <- na.omit(CCNB1_cnacor)
+CCNB1_cnacor <- setDT(CCNB1_cnacor, keep.rownames = TRUE)[]
+CCNB1_cnacor <- CCNB1_cnacor[order(CCNB1_cnacor$CCNB1_cor_cna, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# RNA CCNB1
+CCNB1_rna <- as.numeric(tRNA_Breast[,'CCNB1'])
+CCNB1_cor_rna <- apply(tRNA_Breast,2, function(x){cor(CCNB1_rna,x)})
+CCNB1_rnacor <- as.data.frame(CCNB1_cor_rna, header=FALSE)
+CCNB1_rnacor <- na.omit(CCNB1_rnacor)
+CCNB1_rnacor <- setDT(CCNB1_rnacor, keep.rownames = TRUE)[]
+CCNB1_rnacor <- CCNB1_rnacor[order(CCNB1_rnacor$CCNB1_cor_rna, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# Protein CCNB1
+# delete na for calculate correlations
+CCNB1_pro <- as.numeric(tProtein_Breast[,'CCNB1'])
+CCNB1_pro <- na.omit(CCNB1_pro)
+```
+
+```{r eval=TRUE, results='hold'}
+# to keep compatible dimensions, delete samples(rows) where CCNB1 is NA
+tProtein_Breast <-tProtein_Breast[-c(27, 28,29, 78, 79, 80),]
+CCNB1_cor_pro <- apply(tProtein_Breast,2, function(x){cor(CCNB1_pro,x)})
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_procor <- as.data.frame(CCNB1_cor_pro, header=FALSE)
+CCNB1_procor <- na.omit(CCNB1_procor)
+CCNB1_procor <- setDT(CCNB1_procor, keep.rownames = TRUE)[]
+CCNB1_procor <- CCNB1_procor[order(CCNB1_procor$CCNB1_cor_pro, decreasing = FALSE),]
+```
+# 2-1 pro-rna CCNB1 pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# pro-rna
+plot.data4 <- CCNB1_procor %>% 
+  inner_join(
+    CCNB1_rnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_rna_pro <- ggplot(plot.data4, aes(x = CCNB1_cor_rna, y = CCNB1_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("Protein value") + 
+  ggtitle("CCNB1 RNA-protein")+
+  theme(plot.title=element_text(size=22))
+CCNB1_rna_pro
+#ggsave('gene_pair_plots/CCNB1_rna_pro.jpeg')
+```
+
+```{r eval=TRUE, results='hold'}
+highprorna_ccnb1 <- plot.data4 %>% filter(CCNB1_cor_pro>0.6 & CCNB1_cor_rna> 0.6) 
+
+highprorna_ccnb1 <- highprorna_ccnb1[order(highprorna_ccnb1$CCNB1_cor_pro,decreasing=TRUE),] 
+#write.csv(highprorna_ccnb1, file='9_highcor_tables/highprorna_ccnb1.csv')
+```
+
+# 2-2 pro-cna CCNB1 pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# pro-cna
+plot.data5 <- CCNB1_procor %>% 
+  inner_join(
+    CCNB1_cnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_cna_pro <- ggplot(plot.data5, aes(x = CCNB1_cor_cna, y = CCNB1_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("CNA value") + 
+  ylab("Protein value") + 
+  ggtitle("CCNB1 CNA-protein")+
+  theme(plot.title=element_text(size=22))
+CCNB1_cna_pro
+#ggsave('gene_pair_plots/CCNB1_cna_pro.jpeg')
+```
+```{r eval=TRUE, results='hold'}
+highprocna_ccnb1 <- plot.data5 %>% filter(CCNB1_cor_cna> 0.75) 
+
+highprocna_ccnb1 <- highprocna_ccnb1[order(highprocna_ccnb1$CCNB1_cor_pro,decreasing=TRUE),] 
+#write.csv(highprocna_ccnb1, file='9_highcor_tables/highprocna_ccnb1.csv')
+```
+
+# 2-3 rna-cna CCNB1 pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# rna-cna
+plot.data6 <- CCNB1_rnacor %>% 
+  inner_join(
+    CCNB1_cnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CCNB1_rna_cna <- ggplot(plot.data6, aes(x = CCNB1_cor_rna, y = CCNB1_cor_cna)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("CNA value") + 
+  ggtitle("CCNB1 RNA-CNA")+
+  theme(plot.title=element_text(size=22))
+CCNB1_rna_cna
+#ggsave('gene_pair_plots/CCNB1_rna_cna.jpeg')
+```
+
+```{r eval=TRUE, results='hold'}
+highrnacna_ccnb1 <- plot.data6 %>% filter(CCNB1_cor_cna> 0.75 & CCNB1_cor_rna>0.75) 
+
+highrnacna_ccnb1 <- highrnacna_ccnb1[order(highrnacna_ccnb1$CCNB1_cor_rna,decreasing=TRUE),] 
+#write.csv(highrnacna_ccnb1, file='9_highcor_tables/highrnacna_ccnb1.csv')
+```
+
+
+# CENPF pairs
+```{r eval=TRUE, results='hold'}
+# rna CENPF
+CENPF_rna <- as.numeric(tRNA_Breast[,'CENPF'])
+CENPF_cor_rna <- apply(tRNA_Breast,2, function(x){cor(CENPF_rna,x)})
+CENPF_rnacor <- as.data.frame(CENPF_cor_rna, header=FALSE)
+CENPF_rnacor <- na.omit(CENPF_rnacor)
+CENPF_rnacor <- setDT(CENPF_rnacor, keep.rownames = TRUE)[]
+CENPF_rnacor <- CENPF_rnacor[order(CENPF_rnacor$CENPF_cor_rna, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# CNA CENPF
+CENPF_cna <- as.numeric(tCNA_Breast[,'CENPF'])
+CENPF_cor_cna <- apply(tCNA_Breast,2, function(x){cor(CENPF_cna,x)})
+CENPF_cnacor <- as.data.frame(CENPF_cor_cna, header=FALSE)
+CENPF_cnacor <- na.omit(CENPF_cnacor)
+CENPF_cnacor <- setDT(CENPF_cnacor, keep.rownames = TRUE)[]
+CENPF_cnacor <- CENPF_cnacor[order(CENPF_cnacor$CENPF_cor_cna, decreasing = FALSE),]
+```
+
+```{r eval=TRUE, results='hold'}
+# protein CENPF
+CENPF_pro <- as.numeric(tProtein_Breast[,'CENPF'])
+CENPF_cor_pro <- apply(tProtein_Breast,2, function(x){cor(CENPF_pro,x)})
+CENPF_procor <- as.data.frame(CENPF_cor_pro, header=FALSE)
+CENPF_procor <- na.omit(CENPF_procor)
+CENPF_procor <- setDT(CENPF_procor, keep.rownames = TRUE)[]
+CENPF_procor <- CENPF_procor[order(CENPF_procor$CENPF_cor_pro, decreasing = FALSE),]
+```
+# 3-1 pro-rna CENPF pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# rna-cna
+plot.data7 <- CENPF_rnacor %>% 
+  inner_join(
+    CENPF_procor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CENPF_rna_pro <- ggplot(plot.data7, aes(x = CENPF_cor_rna, y = CENPF_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("Protein value") + 
+  ggtitle("CENPF RNA-protein")+
+  theme(plot.title=element_text(size=22))
+CENPF_rna_pro
+#ggsave('gene_pair_plots/CENPF_rna_pro.jpeg')
+```
+
+```{r eval=TRUE, results='hold'}
+highprorna_cenpf <- plot.data7 %>% filter(CENPF_cor_rna> 0.7 & CENPF_cor_pro>0.7) 
+
+highprorna_cenpf <- highprorna_cenpf[order(highprorna_cenpf$CENPF_cor_rna,decreasing=TRUE),] 
+#write.csv(highprorna_cenpf, file='9_highcor_tables/highprorna_cenpf.csv')
+```
+
+# 3-2 pro-cna CENPF pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# pro-cna
+plot.data8 <- CENPF_cnacor %>% 
+  inner_join(
+    CENPF_procor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CENPF_cna_pro <- ggplot(plot.data8, aes(x = CENPF_cor_cna, y = CENPF_cor_pro)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("CNA value") + 
+  ylab("Protein value") + 
+  ggtitle("CENPF CNA-protein")+
+  theme(plot.title=element_text(size=22))
+CENPF_cna_pro
+#ggsave('gene_pair_plots/CENPF_cna_pro.jpeg')
+```
+```{r eval=TRUE, results='hold'}
+highprocna_cenpf <- plot.data8 %>% filter(CENPF_cor_cna> 0.6 & CENPF_cor_pro>0.5) 
+
+highprocna_cenpf <- highprocna_cenpf[order(highprocna_cenpf$CENPF_cor_cna,decreasing=TRUE),] 
+#write.csv(highprocna_cenpf, file='9_highcor_tables/highprocna_cenpf.csv')
+```
+
+# 3-3 rna-cna CENPF pairs scatter plot 
+```{r eval=TRUE, results='hold'}
+# rna-cna
+plot.data9 <- CENPF_cnacor %>% 
+  inner_join(
+    CENPF_rnacor, 
+    by = 'rn'
+  )
+```
+
+```{r eval=TRUE, results='hold'}
+CENPF_cna_rna <- ggplot(plot.data9, aes(x = CENPF_cor_rna, y = CENPF_cor_cna)) +
+  geom_point(alpha = 0.3, size=1, stroke=0)+
+  xlim(-1, 1) + 
+  ylim(-1, 1) + 
+  xlab("RNA value") + 
+  ylab("CNA value") + 
+  ggtitle("CENPF RNA-CAN")+
+  theme(plot.title=element_text(size=22))
+CENPF_cna_rna
+#ggsave('gene_pair_plots/CENPF_cna_rna.jpeg')
+```
+```{r eval=TRUE, results='hold'}
+highrnacna_cenpf <- plot.data9 %>% filter(CENPF_cor_cna> 0.75 & CENPF_cor_rna>0.7) 
+
+highrnacna_cenpf <- highrnacna_cenpf[order(highrnacna_cenpf$CENPF_cor_cna,decreasing=TRUE),] 
+#write.csv(highrnacna_cenpf, file='9_highcor_tables/highrnacna_cenpf.csv')
+```
+
+```{r}
+#library(ggpubr)
+ggarrange(ERBB2_pro_rna, ERBB2_cna_rna, ERBB2_cna_pro, CCNB1_rna_pro, CCNB1_rna_cna, CCNB1_cna_pro, CENPF_rna_pro, CENPF_cna_rna, CENPF_cna_pro + rremove("x.text"), 
+          labels = c("A", "B", "C",'D', 'E', 'F', 'G', 'H'),
+          ncol = 3, nrow = 3)
+```
+
+
+
+
+

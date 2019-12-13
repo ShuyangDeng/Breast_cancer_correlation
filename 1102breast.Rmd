@@ -1,0 +1,630 @@
+---
+title: "Scatter plots for all gene pairs(R and GPU codes)"
+author: "Shuyang"
+date: "11/2/2019"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setDefault, include=FALSE}
+# This code chunk defines the default chunks setting
+knitr::opts_chunk$set(eval=TRUE, comment="$$$", fig.width=6,fig.height = 3)
+```
+<br>
+```{r eval=TRUE, results='hold'}
+library(tidyverse)
+```
+
+```{r eval=TRUE, results='hold'}
+## 读取数据
+setwd('/Users/dengshuyang/Desktop/Bioinfo2019/Breast_project/')
+Protein_cormat <- read.csv('Protein_cormat.csv', stringsAsFactors = FALSE)
+RNA_cormat <- read.csv('RNA_cormat.csv', stringsAsFactors = FALSE)
+
+Protein_Breast <- read.csv('Protein_Breast.csv', header=TRUE)
+RNA_Breast <- read.csv('RNA_Breast.csv', header=TRUE)
+```
+### Rename row and col names
+```{r eval=TRUE, results='hold'}
+getName <- function(x){
+  v <- unlist(strsplit(x, '\\.'))
+  name <- paste0(v[1], '-', v[2])
+  return(name)
+}
+```
+
+```{r eval=TRUE, results='hold'}
+getName2 <- function(x){
+  w <- unlist(strsplit(x, '\\-'))
+  w2 <- w[1]
+  return(w2)
+}
+```
+
+<br>
+### columns rename
+```{r eval=TRUE, results='hold'}
+colnames(CNA_Breast)[2:ncol(CNA_Breast)] <- sapply(colnames(CNA_Breast)[-1], getName)
+colnames(Protein_Breast)[2:ncol(Protein_Breast)] <- sapply(colnames(Protein_Breast)[-1], getName)
+colnames(RNA_Breast)[2:ncol(RNA_Breast)] <- sapply(colnames(RNA_Breast)[-1], getName)
+```
+### rename the first col 
+```{r eval=TRUE, results='hold'}
+Protein_Breast[,1] <- sapply(as.character(Protein_Breast[,1]), getName2)
+```
+### and then make it the rowname of data frame
+
+```{r eval=TRUE, results='hold'}
+Protein_Breast_2 <- Protein_Breast[,-1]
+rownames(Protein_Breast_2) <- make.names(Protein_Breast[,1], unique=TRUE)
+Protein_Breast <- Protein_Breast_2
+
+CNA_Breast_2 <- CNA_Breast[,-1]
+rownames(CNA_Breast_2) <- make.names(CNA_Breast[,1], unique=TRUE)
+CNA_Breast <- CNA_Breast_2
+
+RNA_Breast_2 <- RNA_Breast[,-1]
+rownames(RNA_Breast_2) <- make.names(RNA_Breast[,1], unique=TRUE)
+RNA_Breast <- RNA_Breast_2
+
+```
+
+```{r eval=TRUE, results='hold'}
+# ## RNA_cormat 删除 X. 行列数据
+#RNA_cormat <- RNA_cormat %>% select(-X.) %>% filter(X != 'X.')
+```
+
+```{r eval=TRUE, results='hold'}
+## 数据处理
+# gene.r表示行基因, gene.c 表示列基因 最终数据匹配为(gene.r, gene.c)
+# 列转行
+
+Protein_cormat.tran <- Protein_cormat %>% 
+  gather(key, value, -X) %>%
+  select(gene.r = X, gene.c = key, Protein_value = value)
+RNA_cormat.tran <- RNA_cormat %>% 
+  gather(key, value, -X) %>% 
+  select(gene.r = X, gene.c = key, RNA_value = value)
+
+## write method in prince gpu
+#Protein_cormat_tran <- gather(Protein_cormat, key, value, -rn)
+#Protein_cormat_tran <- select(Protein_cormat_tran, gene.r=rn, gene.c=key, Protein_value=value)
+#RNA_cormat_tran <- gather(RNA_cormat, key, value, -rn)
+#RNA_cormat_tran <- select(RNA_cormat_tran, gene.r=rn, gene.c=key, #RNA_value=value)
+```
+
+```{r eval=TRUE, results='hold'}
+## 数据合并
+plot.data <- Protein_cormat.tran %>% 
+  inner_join(
+    RNA_cormat.tran, 
+    by = c("gene.r", "gene.c")
+  )
+## write in hpc gpu
+#plot_data <- inner_join(Protein_cormat_tran, RNA_cormat_tran, by = c('gene.r', 'gene.c'))
+```
+
+```{r eval=TRUE, results='hold'}
+## remove na
+plot.data <- plot.data %>% filter(!is.na(Protein_value)) %>% 
+  filter(!is.na(RNA_value))
+## write in hpc
+#plot_data <- filter(plot_data, !is.na(Protein_value))
+#plot_data <- filter(plot_data, !is.na(RNA_value))
+```
+<br>
+#Make table for pro-rna scatterplot: when r(protein)=1, and r(protein)=-1
+```{r eval=TRUE, results='hold'}
+table_protein1 <- plot.data %>% filter(Protein_value == 1)
+table_protein2 <-  plot.data %>% filter(Protein_value == -1)
+# remove same rows contain gene1 and gene2
+remove <- which(table_protein1$gene.r==table_protein1$gene.c)
+table_protein1 <- table_protein1[-remove,]
+#write.csv(table_protein1, file='table_protein1.csv')
+#write.csv(table_protein2, file='table_protein2.csv')
+```
+
+
+### add 2 cols of sample number to table_protein1 (rna)
+table: protein=1/-1, add 2 columns which are the number of RNA and protein sample (na and 1 are considered as na)
+```{r eval=TRUE, results='hold'}
+#gene.r
+n=1
+#b <- matrix(rep(NA,nrow(plot.data)),ncol =1 )
+b <- matrix(rep(NA,nrow(table_protein1)),ncol =1 )
+#d <- data.frame(matrix(NA, nrow=nrow(table_protein1), ncol=ncol(RNA_Breast)))
+#colnames(d) <- colnames(RNA_Breast)
+for(i in table_protein1[,"gene.r"]){
+  #d[i, ]<- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  c <- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  #print(d[i,])
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+}
+sample_number1 <- as.data.frame(b) 
+colnames(sample_number1) <- 'RNA_sample_number.r'
+sample_number1
+
+
+
+#gene.c
+
+n=1
+#b <- matrix(rep(NA,nrow(plot.data)),ncol =1 )
+b <- matrix(rep(NA,nrow(table_protein1)),ncol =1 )
+#d <- data.frame(matrix(NA, nrow=nrow(table_protein1), ncol=ncol(RNA_Breast)))
+#colnames(d) <- colnames(RNA_Breast)
+for(i in table_protein1[,"gene.c"]){
+  #d[i, ]<- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  c <- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  #print(d[i,])
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+ 
+}
+sample_number2 <- as.data.frame(b) 
+colnames(sample_number2) <- 'RNA_sample_number.c'
+sample_number2
+```
+
+
+
+```{r eval=TRUE, results='hold'}
+#combine 2 new cols with original one
+table_protein1_num <- cbind(table_protein1, sample_number1)
+table_protein1_num2 <- cbind(table_protein1_num, sample_number2)
+```
+
+### add 2 cols of sample number to table_protein1 (protein)
+```{r eval=TRUE, results='hold'}
+#gene.r
+n=1
+#b <- matrix(rep(NA,nrow(plot.data)),ncol =1 )
+b <- matrix(rep(NA,nrow(table_protein1)),ncol =1 )
+for(i in table_protein1[,"gene.r"]){
+  c <- Protein_Breast[i, 1:ncol(Protein_Breast)]
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+}
+sample_number3 <- as.data.frame(b) 
+colnames(sample_number3) <- 'Protein_sample_number.r'
+sample_number3
+
+table_protein1_num3 <- cbind(table_protein1_num2, sample_number3)
+```
+
+
+```{r eval=TRUE, results='hold'}
+#gene.c
+
+n=1
+b <- matrix(rep(NA,nrow(table_protein1)),ncol =1 )
+
+for(i in table_protein1[,"gene.c"]){
+  #d[i, ]<- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  c <- Protein_Breast[i, 1:ncol(Protein_Breast)]
+  #print(d[i,])
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+ 
+}
+sample_number4 <- as.data.frame(b) 
+colnames(sample_number4) <- 'Protein_sample_number.c'
+sample_number4
+
+table_protein1_num4 <- cbind(table_protein1_num3, sample_number4)
+```
+```{r eval=TRUE, results='hold'}
+#write.csv(table_protein1_num4, file='9_highcor_andsamplenumber_tables/table_protein1_num4.csv')
+```
+
+
+
+### add 2 cols of sample number to table_protein2 (protein)
+
+```{r eval=TRUE, results='hold'}
+#gene.r
+n=1
+#b <- matrix(rep(NA,nrow(plot.data)),ncol =1 )
+b <- matrix(rep(NA,nrow(table_protein2)),ncol =1 )
+for(i in table_protein2[,"gene.r"]){
+  c <- Protein_Breast[i, 1:ncol(Protein_Breast)]
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+}
+sample_number5 <- as.data.frame(b) 
+colnames(sample_number5) <- 'Protein_sample_number.r'
+sample_number5
+
+table_protein2_num5 <- cbind(table_protein2, sample_number5)
+```
+
+
+```{r eval=TRUE, results='hold'}
+#gene.c
+n=1
+b <- matrix(rep(NA,nrow(table_protein2)),ncol =1 )
+
+for(i in table_protein2[,"gene.c"]){
+  #d[i, ]<- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  c <- Protein_Breast[i, 1:ncol(Protein_Breast)]
+  #print(d[i,])
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+}
+sample_number6 <- as.data.frame(b) 
+colnames(sample_number6) <- 'Protein_sample_number.c'
+sample_number6
+
+table_protein2_num6 <- cbind(table_protein2_num5, sample_number6)
+```
+
+### add 2 cols of sample number to table_protein2 (rna)
+
+```{r eval=TRUE, results='hold'}
+#gene.r
+n=1
+b <- matrix(rep(NA,nrow(table_protein2)),ncol =1 )
+for(i in table_protein2[,"gene.r"]){
+  c <- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+
+}
+sample_number7 <- as.data.frame(b) 
+colnames(sample_number7) <- 'RNA_sample_number.r'
+sample_number7
+
+table_protein2_num7 <- cbind(table_protein2_num6, sample_number7)
+```
+
+
+```{r eval=TRUE, results='hold'}
+#gene.c
+n=1
+b <- matrix(rep(NA,nrow(table_protein2)),ncol =1 )
+
+for(i in table_protein2[,"gene.c"]){
+  c <- RNA_Breast[i, 1:ncol(RNA_Breast)]
+  b[n,1] <- as.vector(apply(c, 1, function(x) length(which(!is.na(x)))))
+  n=n+1
+}
+sample_number8 <- as.data.frame(b) 
+colnames(sample_number8) <- 'RNA_sample_number.c'
+sample_number8
+
+table_protein2_num8 <- cbind(table_protein2_num7, sample_number8)
+```
+
+
+```{r eval=TRUE, results='hold'}
+#write.csv(table_protein2_num8, file='9_highcor_andsamplenumber_tables/table_protein2_num8.csv')
+```
+#  Choose 5 point at each corner(4) of pro-rna scatterplot and then make point plots of RNA correlation, protein correlation
+# 1. RNA correlation
+```{r eval=TRUE, results='hold'}
+#rna
+rightdown <- plot.data %>% filter(RNA_value>0.55 & Protein_value< -0.55) %>% select(-Protein_value)
+rightdown <- rightdown[order(rightdown$RNA_value,decreasing=TRUE),][1:5,]
+
+rightup <- plot.data %>% filter(RNA_value>0.8 & Protein_value> 0.8 & RNA_value<1.0) %>% select(-Protein_value)
+rightup <- rightup[order(rightup$RNA_value,decreasing=TRUE),][1:8,]
+
+leftdown <- plot.data %>% filter(RNA_value< -0.5 & Protein_value< -0.5) %>% select(-Protein_value)
+leftdown <- leftdown[order(leftdown$RNA_value,decreasing=TRUE),][1:7,]
+
+leftup <- plot.data %>% filter(RNA_value< -0.5 & Protein_value> 0.7) %>% select(-Protein_value)
+leftup <- leftup[order(leftup$RNA_value,decreasing=TRUE),][1:6,]
+
+#protein
+rightdown2 <- plot.data %>% filter(RNA_value>0.5 & Protein_value< -0.5) %>% select(-RNA_value)
+rightdown2 <- rightdown2[order(rightdown2$Protein_value,decreasing=TRUE),][1:7,]
+
+rightup2 <- plot.data %>% filter(RNA_value>0.8 & Protein_value> 0.8 & RNA_value<1.0) %>% select(-RNA_value)
+rightup2 <- rightup2[order(rightup2$Protein_value,decreasing=TRUE),][1:8,]
+
+leftdown2 <- plot.data %>% filter(RNA_value< -0.5 & Protein_value< -0.6) %>% select(-RNA_value)
+leftdown2 <- leftdown2[order(leftdown2$Protein_value,decreasing=TRUE),][1:8,]
+
+leftup2 <- plot.data %>% filter(RNA_value< -0.5 & Protein_value> 0.7) %>% select(-RNA_value)
+leftup2 <- leftup2[order(leftup2$Protein_value,decreasing=TRUE),][1:6,]
+```
+
+```{r eval=TRUE, results='hold'}
+#rna1
+#gene.r
+n=1
+c1 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c1) <- colnames(RNA_Breast)
+for(i in rightdown[,"gene.r"]){
+  c1[i,] <- RNA_Breast[i,]
+
+}
+c1
+```
+```{r eval=TRUE, results='hold'}
+#rna1
+#gene.c
+n=1
+c2 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c2) <- colnames(RNA_Breast)
+for(i in rightdown[,"gene.c"]){
+  c2[i,] <- RNA_Breast[i,]
+
+}
+c2
+```
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/rd_rna.jpeg')
+rd_rna <- matplot(t(c1),t(c2), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+```{r eval=TRUE, results='hold'}
+#rna2
+#gene.r
+n=1
+c3 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c3) <- colnames(RNA_Breast)
+for(i in rightup[,"gene.r"]){
+  c3[i,] <- RNA_Breast[i,]
+
+}
+c3
+#gene.c
+n=1
+c4 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c4) <- colnames(RNA_Breast)
+for(i in rightup[,"gene.c"]){
+  c4[i,] <- RNA_Breast[i,]
+
+}
+c4
+#matplot(t(c3),t(c4), pch = 1, type = "p", col =1:5, main='RNA_rightup')
+```
+
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/ru_rna.jpeg')
+ru_rna <- matplot(t(c3),t(c4), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+
+```{r eval=TRUE, results='hold'}
+#rna3
+#gene.r
+n=1
+c5 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c5) <- colnames(RNA_Breast)
+for(i in leftdown[,"gene.r"]){
+  c5[i,] <- RNA_Breast[i,]
+
+}
+c5
+#gene.c
+n=1
+c6 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c6) <- colnames(RNA_Breast)
+for(i in leftdown[,"gene.c"]){
+  c6[i,] <- RNA_Breast[i,]
+
+}
+c6
+```
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/ld_rna.jpeg')
+ld_rna <- matplot(t(c5),t(c6), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+```{r eval=TRUE, results='hold'}
+#rna4
+#gene.r
+n=1
+c7 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c7) <- colnames(RNA_Breast)
+for(i in leftup[,"gene.r"]){
+  c7[i,] <- RNA_Breast[i,]
+
+}
+c7
+#gene.c
+n=1
+c8 <- data.frame(matrix(nrow=0, ncol=ncol(RNA_Breast)))#make a blank df
+colnames(c8) <- colnames(RNA_Breast)
+for(i in leftup[,"gene.c"]){
+  c8[i,] <- RNA_Breast[i,]
+
+}
+c8
+```
+
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/lu_rna.jpeg')
+lu_rna <- matplot(t(c7),t(c8), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+# 2. protein correlation
+```{r eval=TRUE, results='hold'}
+#protein1
+#gene.r
+n=1
+p1 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p1) <- colnames(Protein_Breast)
+for(i in rightdown2[,"gene.r"]){
+  p1[i,] <- Protein_Breast[i,]
+
+}
+p1
+#gene.c
+
+p2 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p2) <- colnames(Protein_Breast)
+for(i in rightdown2[,"gene.c"]){
+  p2[i,] <- Protein_Breast[i,]
+
+}
+p2
+```
+```{r eval=TRUE, results='hold'}
+jpeg('gene_pair_plots/rd_pro.jpeg')
+rd_pro <- matplot(t(p1),t(p2), pch = 1, type = "p", col =1:5)
+dev.off()
+```
+
+
+```{r eval=TRUE, results='hold'}
+#protein2
+#gene.r
+p3 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p3) <- colnames(Protein_Breast)
+for(i in rightup2[,"gene.r"]){
+  p3[i,] <- Protein_Breast[i,]
+
+}
+p3
+#gene.c
+
+p4 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p4) <- colnames(Protein_Breast)
+for(i in rightup2[,"gene.c"]){
+  p4[i,] <- Protein_Breast[i,]
+
+}
+p4
+```
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/ru_pro.jpeg')
+ru_pro <- matplot(t(p3),t(p4), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+```{r eval=TRUE, results='hold'}
+#protein3
+#gene.r
+p5 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p5) <- colnames(Protein_Breast)
+for(i in leftdown2[,"gene.r"]){
+  p5[i,] <- Protein_Breast[i,]
+
+}
+p5
+#gene.c
+
+p6 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p6) <- colnames(Protein_Breast)
+for(i in leftdown2[,"gene.c"]){
+  p6[i,] <- Protein_Breast[i,]
+
+}
+p6
+```
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/ld_pro.jpeg')
+ld_pro <- matplot(t(p5),t(p6), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+
+
+```{r eval=TRUE, results='hold'}
+#protein4
+#gene.r
+p7 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p7) <- colnames(Protein_Breast)
+for(i in leftup2[,"gene.r"]){
+  p7[i,] <- Protein_Breast[i,]
+
+}
+p7
+#gene.c
+
+p8 <- data.frame(matrix(nrow=0, ncol=ncol(Protein_Breast)))#make a blank df
+colnames(p8) <- colnames(Protein_Breast)
+for(i in leftup2[,"gene.c"]){
+  p8[i,] <- Protein_Breast[i,]
+
+}
+p8
+```
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/lu_pro.jpeg')
+lu_pro <- matplot(t(p7),t(p8), pch = 1, type = "p", col =1:5)
+#dev.off()
+```
+# Make table for r(R1, P2), r(R2, P1) under condition r(R1, P1) < 0.3, etc… (only in pro-ran scatterplot)
+```{r eval=TRUE, results='hold'}
+pro_rna_cor <- cor(plot.data[sapply(plot.data,1, is.numeric)])
+```
+
+## 画图
+## when so much point run on gpu, how to make scatter plot more clear to avoid big black hole-like picture:
+https://stackoverflow.com/questions/37381684/ggplot-alpha-levels-appear-different-on-fill-and-border-of-points-ringing-artef
+
+
+```{r eval=TRUE, results='hold'}
+#jpeg('gene_pair_plots/combined.jpeg')
+par(mfrow=c(2,4))
+#rna
+matplot(t(c1),t(c2), pch = 1, type = "p", col =1:5, main='RNA_rightdown')
+matplot(t(c3),t(c4), pch = 1, type = "p", col =1:5, main='RNA_rightup')
+matplot(t(c5),t(c6), pch = 1, type = "p", col =1:5, main='RNA_leftdown')
+matplot(t(c7),t(c8), pch = 1, type = "p", col =1:5, main='RNA_leftup')
+#pro
+matplot(t(p1),t(p2), pch = 1, type = "p", col =1:5, main='Protein_rightdown')
+matplot(t(p3),t(p4), pch = 1, type = "p", col =1:5, main='Protein_rightup')
+matplot(t(p5),t(p6), pch = 1, type = "p", col =1:5, main='Protein_leftdown')
+matplot(t(p7),t(p8), pch = 1, type = "p", col =1:5, main='Protein_leftup')
+
+#dev.off()
+```
+
+```{r}
+#jpeg('gene_pair_plots/leftup_rna_legend.jpeg')
+col_set <- rainbow(ncol(t(c7)))
+matplot(t(c7),t(c8), pch = 1, type = "p",col = col_set, main='RNA_leftup')
+legend( 5, c("C7orf63", "B4GALT2", "CCNG1", "CCNE1","C5orf15"),col =col_set, pch=1)
+#dev.off()
+```
+---------
+library(tidyverse)
+library(dplyr)
+library(data.table)
+#install.packages('dtplyr')
+#library(dtplyr)
+library(lubridate)
+
+#Protein_cormat_tran <- read.csv('Protein_cormat_tran.csv', stringsAsFactors=FALSE)
+#Protein_cormat_tran <- select(Protein_cormat_tran, -X)
+RNA_cormat_tran <- read.csv('RNA_cormat_tran.csv', stringsAsFactors=FALSE)
+RNA_cormat_tran <- select(RNA_cormat_tran, -X)
+CNA_cormat_tran <- read.csv('CNA_cormat_tran.csv', stringsAsFactors=FALSE)
+CNA_cormat_tran <- select(CNA_cormat_tran, -X)
+
+plot_data <- inner_join(RNA_cormat_tran, CNA_cormat_tran, by = c('gene.r', 'gene.c'))
+
+plot_data <- filter(plot_data, !is.na(RNA_value))
+plot_data <- filter(plot_data, !is.na(CNA_value))
+
+#write.csv(plot_data, file='plot_data.csv')
+
+pro_rna_scatter <- ggplot(plot_data, aes(x = RNA_value, y = CNA_value)) +
+  geom_point(alpha = 0.3) +
+  xlim(-1, 1) +ylim(-1, 1) +
+  xlab("RNA value") +
+  ylab("CNA value") +
+  ggtitle("gene pairs correlation of rna-cna")
+ggsave('rna_cna_scatter.jpeg')
+
+
+
+
+
+
+
